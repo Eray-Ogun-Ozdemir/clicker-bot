@@ -20,8 +20,8 @@ def main():
     muted = "#675f5c"
     red = "#c23430"
     root.configure(bg=white)
-    root.minsize(600, 650)
-    root.geometry("840x720")
+    root.geometry("1000x700")
+    root.minsize(800, 620)
     style = ttk.Style(root)
     style.theme_use("clam")
     style.configure("TFrame", background=white)
@@ -37,8 +37,22 @@ def main():
                         font=("Helvetica", 13, "bold"), padding=(16, 11), borderwidth=0)
         style.map(name, background=[("disabled", "#eeeae8"), ("active", hover)],
                   foreground=[("disabled", muted)])
-    panel = ttk.Frame(root, padding=(40, 18))
-    panel.pack(fill="both", expand=True)
+    bar = tk.Frame(root, bg="#f6f5f4", height=42)
+    bar.pack(fill="x")
+    tk.Label(bar, text="Clicker Bot   /   Çalışma alanım", bg="#f6f5f4", fg=ink,
+             font=("Helvetica", 12, "bold"), padx=18, pady=12).pack(side="left")
+    body = tk.Frame(root, bg=white)
+    body.pack(fill="both", expand=True)
+    sidebar = tk.Frame(body, bg="#faf9f8", width=190)
+    sidebar.pack(side="left", fill="y")
+    sidebar.pack_propagate(False)
+    tk.Label(sidebar, text="ÇALIŞMA ALANI", bg="#faf9f8", fg=muted,
+             font=("Helvetica", 10, "bold"), padx=14, pady=18).pack(anchor="w")
+    tk.Label(sidebar, text="●    Tarayıcı otomasyonu", bg="#fae9e6", fg=red,
+             anchor="w", padx=12, pady=9).pack(fill="x", padx=6)
+    tk.Frame(body, bg="#e4dfdb", width=1).pack(side="left", fill="y")
+    panel = ttk.Frame(body, padding=(24, 18))
+    panel.pack(side="left", fill="both", expand=True)
     header = ttk.Frame(panel)
     header.pack(fill="x")
     if logo_path.is_file():
@@ -156,8 +170,8 @@ def main():
     for col, button in enumerate(buttons):
         actions.columnconfigure(col, weight=1, uniform="actions")
         button.grid(row=0, column=col, sticky="ew", padx=(0, 6) if col == 0 else (6, 0))
-    journal = tk.Frame(panel, bg=white, highlightbackground="#e4dfdb", highlightthickness=1)
-    journal.pack(fill="both", expand=True, pady=18)
+    journal = tk.Frame(sidebar, bg=white, highlightbackground="#e4dfdb", highlightthickness=1)
+    journal.pack(fill="both", expand=True, padx=7, pady=16)
     tk.Label(journal, text="∿    İşlem günlüğü", bg="#f8f7f6", fg=ink,
              anchor="w", padx=14, pady=8).pack(fill="x")
     history = tk.Text(journal, height=3, width=1, bg=white, fg=ink, wrap="word",
@@ -173,6 +187,7 @@ def main():
         history.see("end")
         history.configure(state="disabled")
 
+    ttk.Frame(panel).pack(fill="both", expand=True)
     tk.Frame(panel, height=1, bg="#e5dfdb").pack(fill="x")
     footer = ttk.Frame(panel)
     footer.pack(fill="x", pady=(10, 0))
