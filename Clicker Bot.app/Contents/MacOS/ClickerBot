@@ -1,0 +1,4 @@
+#!/bin/sh
+project=$(cd "$(dirname "$0")/../../.." && pwd)
+python="$project/.venv/bin/python"
+exec "$python" "$project/app.py"
