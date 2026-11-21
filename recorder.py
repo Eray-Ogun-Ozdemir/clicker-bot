@@ -42,14 +42,25 @@ def main():
         parser.error(str(exc))
 
 
-def run(file, url_to_record=None, status=print, console=False):
+def load_recording(file):
+    data = json.loads(file.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("steps"), list):
+        raise ValueError("Kayıtta adım listesi bulunamadı.")
+    for index, step in enumerate(data["steps"], 1):
+        if not isinstance(step, dict) or not all(isinstance(step.get(k), str)
+                                                for k in ("action", "selector", "url")):
+            raise ValueError(f"{index}. adım geçersiz.")
+    return data
+
+
+def run(file, url_to_record=None, status=print, console=False, *, data=None, on_step=None):
     recording = url_to_record is not None
     if recording:
         if file.exists():
             raise ValueError("Bu kayıt adı kullanılıyor. Yeni bir dosya adı seç.")
         data = {"url": url_to_record, "steps": [], "viewport": {"width": 1280, "height": 800}}
-    else:
-        data = json.loads(file.read_text(encoding="utf-8"))
+    elif data is None:
+        data = load_recording(file)
     url = urlsplit(data["url"])
     if url.scheme not in ("http", "https") or not url.hostname:
         raise ValueError("http veya https bağlantısı gir.")
@@ -83,8 +94,12 @@ def run(file, url_to_record=None, status=print, console=False):
             for index, step in enumerate(data["steps"], 1):
                 if index > 1:
                     time.sleep(random.uniform(1, 2))
+                if on_step:
+                    on_step(index)
                 status(f'{index}. adım: {step["action"]}')
                 play(page, step)
+            if on_step:
+                on_step(None)
             browser.close()
             status("Oynatma tamamlandı. Tarayıcı kapatıldı.")
 

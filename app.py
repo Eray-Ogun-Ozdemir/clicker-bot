@@ -6,7 +6,8 @@ from tkinter import filedialog, messagebox, ttk
 from urllib.parse import urlsplit
 
 from mascot import Mascot
-from recorder import run
+from inspector import RecordingInspector
+from recorder import load_recording, run
 
 
 def main():
@@ -112,8 +113,30 @@ def main():
     events = queue.Queue()
     busy = False
 
-    def start(recording):
-        nonlocal busy
+    inspector = None
+    active_step = None
+
+    def open_recording(autoplay):
+        nonlocal inspector
+        filename = filedialog.askopenfilename(filetypes=[("Bot kaydı", "*.json")])
+        if not filename:
+            return
+        path = Path(filename)
+        try:
+            data = load_recording(path)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Kayıt", str(exc))
+            return
+        if inspector:
+            inspector.destroy()
+        inspector = RecordingInspector(root, path, data, lambda: start(False, path, data))
+        if autoplay:
+            start(False, path, data)
+
+    def start(recording, path=None, data=None):
+        nonlocal busy, active_step
+        if busy:
+            return
         address = url.get().strip() if recording else None
         if recording:
             try:
@@ -125,11 +148,15 @@ def main():
                 status.set("Hata")
                 messagebox.showerror("Adres", "http:// veya https:// ile başlayan bir URL gir.")
                 return
-        options = {"filetypes": [("Bot kaydı", "*.json")]}
-        path = (filedialog.asksaveasfilename(defaultextension=".json", **options)
-                if recording else filedialog.askopenfilename(**options))
-        if not path:
-            return
+            path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("Bot kaydı", "*.json")])
+            if not path:
+                return
+        active_step = None
+        if inspector:
+            inspector.play_button.state(["disabled"])
+            if not recording:
+                inspector.detail.set("")
+                inspector.table.selection_remove(*inspector.table.selection())
         busy = True
         mascot.move("recording" if recording else "playing")
         for button in buttons:
@@ -141,7 +168,8 @@ def main():
             try:
                 def report(msg):
                     events.put(("status", msg))
-                run(Path(path), address, report)
+                run(Path(path), address, report, data=data,
+                    on_step=lambda index: events.put(("step", index)))
             except Exception as exc:
                 events.put(("error", str(exc)))
             finally:
@@ -149,17 +177,27 @@ def main():
         threading.Thread(target=worker, daemon=True).start()
 
     def update():
-        nonlocal busy
+        nonlocal busy, active_step
         while not events.empty():
             kind, value = events.get()
             if kind == "done":
                 busy = False
+                if inspector:
+                    inspector.play_button.state(["!disabled"])
                 if status.get() != "Hata":
                     mascot.move("idle")
                     status.set("Hazır")
                 for button in buttons:
                     button.state(["!disabled"])
+            elif kind == "step":
+                active_step = value
+                if value is not None:
+                    inspector.highlight(value)
             elif kind == "error":
+                if active_step is not None:
+                    inspector.highlight(active_step)
+                    inspector.detail.set(f"{active_step}. adımda hata · {value}")
+                    inspector.deiconify()
                 mascot.move("fail")
                 status.set("Hata")
                 log(value)
@@ -171,7 +209,8 @@ def main():
     actions = ttk.Frame(panel)
     actions.pack(fill="x", pady=(20, 0))
     buttons = [ttk.Button(actions, style="Record.TButton", text="Kaydı başlat", command=lambda: start(True)),
-               ttk.Button(actions, style="Play.TButton", text="Kayıt dosyasını oynat", command=lambda: start(False))]
+               ttk.Button(actions, style="Play.TButton", text="Kayıt dosyasını oynat", command=lambda: open_recording(True)),
+               ttk.Button(actions, text="Kaydı incele", command=lambda: open_recording(False))]
     for col, button in enumerate(buttons):
         actions.columnconfigure(col, weight=1, uniform="actions")
         button.grid(row=0, column=col, sticky="ew", padx=(0, 6) if col == 0 else (6, 0))

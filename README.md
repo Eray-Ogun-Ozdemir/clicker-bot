@@ -40,6 +40,8 @@ To build a standalone executable on Windows, run `build-windows.cmd`. The script
 4. Close the recording tab to finish and save. Recorded text values are stored in the JSON file, so review it before sharing.
 5. Click **Kayıt dosyasını oynat** (Replay recording) and select the saved file. Playback opens the recorded URL, waits one to two seconds between actions and closes the browser on completion.
 
+Choose **Kaydı incele** to inspect a saved JSON recording before launching a browser. The inspector lists the steps in order with their targets and input values. **Bu kaydı oynat** runs the displayed recording, highlights the current step and shows the error beside the list if a step fails.
+
 You can also use the command line from the activated environment:
 
 ```sh
