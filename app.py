@@ -5,6 +5,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from urllib.parse import urlsplit
 
+from mascot import Mascot
 from recorder import run
 
 
@@ -55,9 +56,8 @@ def main():
     panel.pack(side="left", fill="both", expand=True)
     header = ttk.Frame(panel)
     header.pack(fill="x")
-    if logo_path.is_file():
-        mascot = logo.subsample(5)
-        ttk.Label(header, image=mascot).pack(side="right")
+    mascot = Mascot(header)
+
     title = ttk.Frame(header)
     title.pack(side="left")
     ttk.Label(title, text="➤   MASAÜSTÜ YARDIMCISI", foreground=muted,
@@ -121,6 +121,8 @@ def main():
                 if parsed.scheme not in ("http", "https") or not parsed.hostname:
                     raise ValueError
             except ValueError:
+                mascot.move("fail")
+                status.set("Hata")
                 messagebox.showerror("Adres", "http:// veya https:// ile başlayan bir URL gir.")
                 return
         options = {"filetypes": [("Bot kaydı", "*.json")]}
@@ -129,6 +131,7 @@ def main():
         if not path:
             return
         busy = True
+        mascot.move("recording" if recording else "playing")
         for button in buttons:
             button.state(["disabled"])
         status.set("Kaydediliyor" if recording else "Oynatılıyor")
@@ -152,10 +155,12 @@ def main():
             if kind == "done":
                 busy = False
                 if status.get() != "Hata":
+                    mascot.move("idle")
                     status.set("Hazır")
                 for button in buttons:
                     button.state(["!disabled"])
             elif kind == "error":
+                mascot.move("fail")
                 status.set("Hata")
                 log(value)
                 messagebox.showerror("Clicker Bot", value)
