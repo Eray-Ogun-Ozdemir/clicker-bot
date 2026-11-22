@@ -128,8 +128,10 @@ def main():
             messagebox.showerror("Kayıt", str(exc))
             return
         if inspector:
+            if not inspector.confirm_discard():
+                return
             inspector.destroy()
-        inspector = RecordingInspector(root, path, data, lambda: start(False, path, data))
+        inspector = RecordingInspector(root, path, data, lambda path, data: start(False, path, data))
         if autoplay:
             start(False, path, data)
 
@@ -153,7 +155,7 @@ def main():
                 return
         active_step = None
         if inspector:
-            inspector.play_button.state(["disabled"])
+            inspector.set_busy(True)
             if not recording:
                 inspector.detail.set("")
                 inspector.table.selection_remove(*inspector.table.selection())
@@ -183,7 +185,7 @@ def main():
             if kind == "done":
                 busy = False
                 if inspector:
-                    inspector.play_button.state(["!disabled"])
+                    inspector.set_busy(False)
                 if status.get() != "Hata":
                     mascot.move("idle")
                     status.set("Hazır")
@@ -242,7 +244,7 @@ def main():
     def close():
         if busy:
             messagebox.showinfo("Clicker Bot", "Önce işlem yapılan tarayıcı sekmesini kapat.")
-        else:
+        elif inspector is None or inspector.confirm_discard():
             root.destroy()
     root.protocol("WM_DELETE_WINDOW", close)
     update()

@@ -42,6 +42,8 @@ To build a standalone executable on Windows, run `build-windows.cmd`. The script
 
 Choose **Kaydı incele** to inspect a saved JSON recording before launching a browser. The inspector lists the steps in order with their targets and input values. **Bu kaydı oynat** runs the displayed recording, highlights the current step and shows the error beside the list if a step fails.
 
+In the inspector, select a step and use **Düzenle** (Edit) to change its selector or input value. Use **Yukarı** (Up), **Aşağı** (Down), or **Sil** (Delete) to adjust the sequence. **Bu kaydı oynat** runs the edited steps, and **Kopyasını kaydet** saves a new JSON file.
+
 You can also use the command line from the activated environment:
 
 ```sh

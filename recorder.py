@@ -9,6 +9,9 @@ from urllib.parse import urlsplit
 from playwright.sync_api import sync_playwright
 
 
+CLICK_COORDINATES = ("x", "y", "scrollX", "scrollY")
+
+
 def play(page, step):
     page.wait_for_url(lambda url: url == step["url"], timeout=5000)
     target = page.locator(step["selector"])
@@ -17,7 +20,7 @@ def play(page, step):
     elif step["action"] == "keydown":
         target.press("Enter", timeout=5000)
     elif step["action"] == "click":
-        if target.count() == 1:
+        if target.count() == 1 or not all(key in step for key in CLICK_COORDINATES):
             target.click(position=step.get("position"), timeout=5000)
         else:
             page.evaluate("p => window.scrollTo(p)", {
@@ -51,6 +54,17 @@ def load_recording(file):
                                                 for k in ("action", "selector", "url")):
             raise ValueError(f"{index}. adım geçersiz.")
     return data
+
+
+def save_recording(file, data):
+    content = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    output = file.open("xb")
+    try:
+        with output:
+            output.write(content)
+    except OSError:
+        file.unlink(missing_ok=True)
+        raise
 
 
 def run(file, url_to_record=None, status=print, console=False, *, data=None, on_step=None):
@@ -87,8 +101,7 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
             status("Kayıt başladı. Bitirmek için kayıt sekmesini kapat.")
             with page.expect_event("close", timeout=0):
                 pass
-            with file.open("x", encoding="utf-8") as output:
-                json.dump(data, output, ensure_ascii=False, indent=2)
+            save_recording(file, data)
             status(f'{len(data["steps"])} adım kaydedildi: {file}')
         else:
             for index, step in enumerate(data["steps"], 1):
