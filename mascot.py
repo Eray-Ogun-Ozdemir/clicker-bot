@@ -15,7 +15,7 @@ class Mascot:
     """The llama in the main window. Poses switch directly, without transition animations."""
 
     def __init__(self, parent):
-        self.label = tk.Label(parent, bg=theme.WHITE, borderwidth=0)
+        self.label = tk.Label(parent, bg=theme.BG, borderwidth=0)
         self.label.pack(side="right")
         self.poses = {p.stem: tk.PhotoImage(file=str(p)) for p in ASSETS.glob("*.png")}
         self.timer = None

@@ -55,6 +55,10 @@ python recorder.py record https://example.com session.json
 python recorder.py play session.json
 ```
 
+## Appearance
+
+Clicker Bot opens in a light or dark palette that matches the system appearance: the macOS **Açık**, **Koyu** and **Otomatik** settings, or the Windows app mode. A change takes effect the next time you open the app. To force a palette, set `CLICKER_BOT_THEME=light` or `CLICKER_BOT_THEME=dark` before starting it. All colours, fonts and button styles are defined in `theme.py`.
+
 ## Mascot behavior
 
 The llama holds a camera while recording and a tablet during playback. After ten seconds of playback, it switches to the TV pose. Errors have a dedicated pose. Poses switch directly, without transition animations.

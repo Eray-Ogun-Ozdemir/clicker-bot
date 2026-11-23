@@ -20,15 +20,14 @@ def main():
     if logo_path.is_file():
         logo = tk.PhotoImage(file=str(logo_path))
         root.iconphoto(True, logo)
-    white, ink, muted, red = theme.WHITE, theme.INK, theme.MUTED, theme.RED
-    root.configure(bg=white)
+    theme.apply(root)  # picks the light or dark palette; everything below reads it
+    white, ink, muted, red = theme.BG, theme.INK, theme.MUTED, theme.RED
     root.geometry("1000x700")
     root.minsize(800, 620)
-    theme.apply(root)
     bar = tk.Frame(root, bg=theme.BAR)
     bar.pack(fill="x")
     for text, color, bold, padx in (("➤", red, False, (20, 0)), ("Clicker Bot", ink, True, (10, 0)),
-                                    ("/", "#b3ada8", False, 14), ("Çalışma alanım", muted, False, 0)):
+                                    ("/", theme.SLASH, False, 14), ("Çalışma alanım", muted, False, 0)):
         tk.Label(bar, text=text, bg=theme.BAR, fg=color, pady=12,
                  font=(theme.FAMILY, 12, "bold" if bold else "normal")).pack(side="left", padx=padx)
     tk.Frame(root, bg=theme.BORDER, height=1).pack(fill="x")
@@ -64,7 +63,7 @@ def main():
         row.pack(fill="x")
         badge = tk.Canvas(row, width=26, height=26, bg=white, highlightthickness=0)
         badge.pack(side="left")
-        badge.create_oval(1, 1, 24, 24, outline="#ddd6d2")
+        badge.create_oval(1, 1, 24, 24, outline=theme.BADGE_RING)
         badge.create_text(13, 13, text=number, fill=muted, font=(theme.FAMILY, 10))
         ttk.Label(row, text=title, font=(theme.FAMILY, 15, "bold")).pack(side="left", padx=8)
 
@@ -124,8 +123,8 @@ def main():
     modes = ttk.Frame(panel)
     modes.pack(fill="x", pady=(10, 0))
     for column, (label, bg, border, color) in enumerate([
-            ("●    Kaydederek hazırla", "#fff8f7", theme.SELECTED_BORDER, red),
-            ("○    Manuel hazırla     ·  yakında", theme.MUTED_SURFACE, theme.BORDER, "#938d88")]):
+            ("●    Kaydederek hazırla", theme.CARD_SELECTED, theme.SELECTED_BORDER, red),
+            ("○    Manuel hazırla     ·  yakında", theme.MUTED_SURFACE, theme.BORDER, theme.CARD_DISABLED_TEXT)]):
         modes.columnconfigure(column, weight=1, uniform="cards")
         card = tk.Frame(modes, bg=border)
         card.grid(row=0, column=column, sticky="ew", padx=(0, 7) if column == 0 else (7, 0))
@@ -138,9 +137,9 @@ def main():
     fields = []
     for column, label in enumerate(("Kullanıcı adı / e-posta", "Parola")):
         account.columnconfigure(column, weight=1, uniform="account")
-        ttk.Label(account, text=label).grid(row=0, column=column, sticky="w")
-        entry = ttk.Entry(account, show="•" if column else "")
-        entry.grid(row=1, column=column, sticky="ew", padx=(0, 6) if not column else (0, 0))
+        ttk.Label(account, text=label).grid(row=0, column=column, sticky="w", pady=(0, 5))
+        holder, entry = theme.entry(account, show="•" if column else "")
+        holder.grid(row=1, column=column, sticky="ew", padx=(0, 6) if not column else (6, 0))
         fields.append(entry)
     status = tk.StringVar(value="Hazır")
     events = queue.Queue()
@@ -203,7 +202,7 @@ def main():
         if recording:
             fields[1].delete(0, "end")
         for field_entry in fields:
-            field_entry.state(["disabled"])
+            field_entry.configure(state="disabled")
         url.configure(state="disabled")
         active_step = None
         if inspector:
@@ -239,7 +238,7 @@ def main():
             if kind == "done":
                 busy = False
                 for field_entry in fields:
-                    field_entry.state(["!disabled"])
+                    field_entry.configure(state="normal")
                 url.configure(state="normal")
                 if inspector:
                     inspector.set_busy(False)
