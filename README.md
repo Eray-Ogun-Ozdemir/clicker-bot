@@ -42,7 +42,7 @@ To build a standalone executable on Windows, run `build-windows.cmd`. The script
 
 ### Account details
 
-Under **Hesap bilgileri** you can optionally enter a username and password before recording. They require an `https://` starting URL. When you focus a username or password field on that site during recording, Clicker Bot fills it for you. The username is saved in the JSON file as a normal input step. The password is never written to the file: it is stored in the macOS Keychain or Windows Credential Manager, and the recording only keeps a reference to it. Playback on another computer therefore cannot fill the password.
+Under **Hesap bilgileri** you can optionally enter a username and password before recording. They require an `https://` starting URL. When you focus a username or password field on that site during recording, Clicker Bot fills it for you. The username is saved in the JSON file as a normal input step. The password is never written to the file: it is stored in the macOS Keychain or Windows Credential Manager, and the recording only keeps a reference to it. Playback on another computer therefore cannot fill the password. The password is stored only after the recording file has been saved. To remove it from this device, open the recording with **Kaydı incele** and choose **Parolayı cihazdan sil**. Copies of the recording share the same stored password.
 
 Choose **Kaydı incele** to inspect a saved JSON recording before launching a browser. The inspector lists the steps in order with their targets and input values. **Bu kaydı oynat** runs the displayed recording, highlights the current step and shows the error beside the list if a step fails.
 
