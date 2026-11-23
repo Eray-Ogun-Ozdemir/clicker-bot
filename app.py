@@ -5,6 +5,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from urllib.parse import urlsplit
 
+import theme
 from mascot import Mascot
 from inspector import RecordingInspector
 from recorder import Control, load_recording, run
@@ -19,49 +20,31 @@ def main():
     if logo_path.is_file():
         logo = tk.PhotoImage(file=str(logo_path))
         root.iconphoto(True, logo)
-    white = "#ffffff"
-    ink = "#302a29"
-    muted = "#675f5c"
-    red = "#c23430"
+    white, ink, muted, red = theme.WHITE, theme.INK, theme.MUTED, theme.RED
     root.configure(bg=white)
     root.geometry("1000x700")
     root.minsize(800, 620)
-    style = ttk.Style(root)
-    style.theme_use("clam")
-    style.configure("TFrame", background=white)
-    style.configure("TLabel", background=white, foreground=ink)
-    style.configure("TRadiobutton", background=white, foreground=ink)
-    style.configure("TEntry", fieldbackground=white, foreground=ink, padding=9)
-    style.map("TEntry", bordercolor=[("focus", red)])
-    for name, background, foreground, hover in (
-        ("Record.TButton", red, white, "#a62c28"),
-        ("Play.TButton", white, ink, "#f9f8f7"),
-        ("Inspect.TButton", white, red, "#fdf7f6"),
-    ):
-        style.configure(name, background=background, foreground=foreground,
-                        font=("Helvetica", 13, "bold"), padding=(12, 8), relief="flat", borderwidth=0)
-        style.map(name, background=[("disabled", "#eeeae8"), ("active", hover)],
-                  foreground=[("disabled", muted)])
-    bar = tk.Frame(root, bg="#f6f5f4")
+    theme.apply(root)
+    bar = tk.Frame(root, bg=theme.BAR)
     bar.pack(fill="x")
     for text, color, bold, padx in (("➤", red, False, (20, 0)), ("Clicker Bot", ink, True, (10, 0)),
                                     ("/", "#b3ada8", False, 14), ("Çalışma alanım", muted, False, 0)):
-        tk.Label(bar, text=text, bg="#f6f5f4", fg=color, pady=12,
-                 font=("Helvetica", 12, "bold" if bold else "normal")).pack(side="left", padx=padx)
-    tk.Frame(root, bg="#e4dfdb", height=1).pack(fill="x")
+        tk.Label(bar, text=text, bg=theme.BAR, fg=color, pady=12,
+                 font=(theme.FAMILY, 12, "bold" if bold else "normal")).pack(side="left", padx=padx)
+    tk.Frame(root, bg=theme.BORDER, height=1).pack(fill="x")
     body = tk.Frame(root, bg=white)
     body.pack(fill="both", expand=True)
-    sidebar = tk.Frame(body, bg="#faf9f8", width=190)
+    sidebar = tk.Frame(body, bg=theme.SIDEBAR, width=190)
     sidebar.pack(side="left", fill="y")
     sidebar.pack_propagate(False)
-    tk.Label(sidebar, text="ÇALIŞMA ALANI", bg="#faf9f8", fg=muted,
-             font=("Helvetica", 10, "bold"), padx=14, pady=18).pack(anchor="w")
-    selected = tk.Frame(sidebar, bg="#fdf1ef")
+    tk.Label(sidebar, text="ÇALIŞMA ALANI", bg=theme.SIDEBAR, fg=muted,
+             font=(theme.FAMILY, 10, "bold"), padx=14, pady=18).pack(anchor="w")
+    selected = tk.Frame(sidebar, bg=theme.SELECTED)
     selected.pack(fill="x")
     tk.Frame(selected, bg=red, width=3).pack(side="left", fill="y")
-    tk.Label(selected, text="◍   Tarayıcı otomasyonu", bg="#fdf1ef", fg=ink,
+    tk.Label(selected, text="◍   Tarayıcı otomasyonu", bg=theme.SELECTED, fg=ink,
              anchor="w", padx=12, pady=11).pack(side="left", fill="x", expand=True)
-    tk.Frame(body, bg="#e4dfdb", width=1).pack(side="left", fill="y")
+    tk.Frame(body, bg=theme.BORDER, width=1).pack(side="left", fill="y")
     panel = ttk.Frame(body, padding=(24, 18))
     panel.pack(side="left", fill="both", expand=True)
     header = ttk.Frame(panel)
@@ -71,10 +54,10 @@ def main():
     title = ttk.Frame(header)
     title.pack(side="left")
     ttk.Label(title, text="➤   MASAÜSTÜ YARDIMCISI", foreground=muted,
-              font=("Helvetica", 10, "bold")).pack(anchor="w")
-    ttk.Label(title, text="Clicker Bot", font=("Helvetica", 38, "bold")).pack(anchor="w", pady=8)
+              font=(theme.FAMILY, 10, "bold")).pack(anchor="w")
+    ttk.Label(title, text="Clicker Bot", font=(theme.FAMILY, 38, "bold")).pack(anchor="w", pady=8)
     tk.Frame(title, width=34, height=3, bg=red).pack(anchor="w")
-    tk.Frame(panel, height=1, bg="#e5dfdb").pack(fill="x", pady=(16, 18))
+    tk.Frame(panel, height=1, bg=theme.BORDER).pack(fill="x", pady=(16, 18))
 
     def section(number, title):
         row = ttk.Frame(panel)
@@ -82,26 +65,26 @@ def main():
         badge = tk.Canvas(row, width=26, height=26, bg=white, highlightthickness=0)
         badge.pack(side="left")
         badge.create_oval(1, 1, 24, 24, outline="#ddd6d2")
-        badge.create_text(13, 13, text=number, fill=muted, font=("Helvetica", 10))
-        ttk.Label(row, text=title, font=("Helvetica", 15, "bold")).pack(side="left", padx=8)
+        badge.create_text(13, 13, text=number, fill=muted, font=(theme.FAMILY, 10))
+        ttk.Label(row, text=title, font=(theme.FAMILY, 15, "bold")).pack(side="left", padx=8)
 
     section("01", "Başlangıç URL’si")
     # A 1px frame around a white box: Tk on macOS does not draw highlight borders reliably.
-    field = tk.Frame(panel, bg="#ded7d3")
+    field = tk.Frame(panel, bg=theme.FIELD_BORDER)
     field.pack(fill="x", pady=(12, 0))
     url_box = tk.Frame(field, bg=white)
     url_box.pack(fill="both", padx=1, pady=1)
     tk.Label(url_box, text="◎", fg=muted, bg=white).pack(side="left", padx=12)
     url = tk.Entry(url_box, relief="flat", bg=white, fg=ink, insertbackground=ink,
-                   disabledbackground="#f8f7f6", disabledforeground=muted,
-                   highlightthickness=0, font=("Helvetica", 14))
+                   disabledbackground=theme.MUTED_SURFACE, disabledforeground=muted,
+                   highlightthickness=0, font=(theme.FAMILY, 14))
     url.pack(side="left", fill="x", expand=True, ipady=11)
-    hint = tk.Label(url, text="https://example.com", bg=white, fg="#a29b96")
+    hint = tk.Label(url, text="https://example.com", bg=white, fg=theme.HINT)
     hint.place(x=3, rely=0.5, anchor="w")
     hint.bind("<Button-1>", lambda _: url.focus_set())
     address_text = tk.StringVar()
     url.configure(textvariable=address_text)
-    url_error = tk.Label(panel, bg=white, fg=red, anchor="w", font=("Helvetica", 12))
+    url_error = tk.Label(panel, bg=white, fg=red, anchor="w", font=(theme.FAMILY, 12))
 
     def show_url_error(message):
         url_error.configure(text="⚠  " + message)
@@ -110,7 +93,7 @@ def main():
 
     def clear_url_error():
         url_error.pack_forget()
-        field.configure(bg=red if root.focus_get() == url else "#ded7d3")
+        field.configure(bg=red if root.focus_get() == url else theme.FIELD_BORDER)
 
     def valid_url(address):
         try:
@@ -132,7 +115,7 @@ def main():
         if address and not valid_url(address):
             show_url_error(URL_MESSAGE)
         elif not url_error.winfo_ismapped():
-            field.configure(bg="#ded7d3")
+            field.configure(bg=theme.FIELD_BORDER)
     url.bind("<FocusIn>", lambda _: field.configure(bg=red))
     url.bind("<FocusOut>", leave_url)
     url.focus_set()
@@ -141,8 +124,8 @@ def main():
     modes = ttk.Frame(panel)
     modes.pack(fill="x", pady=(10, 0))
     for column, (label, bg, border, color) in enumerate([
-            ("●    Kaydederek hazırla", "#fff8f7", "#eea19a", red),
-            ("○    Manuel hazırla     ·  yakında", "#f8f7f6", "#e4dfdb", "#938d88")]):
+            ("●    Kaydederek hazırla", "#fff8f7", theme.SELECTED_BORDER, red),
+            ("○    Manuel hazırla     ·  yakında", theme.MUTED_SURFACE, theme.BORDER, "#938d88")]):
         modes.columnconfigure(column, weight=1, uniform="cards")
         card = tk.Frame(modes, bg=border)
         card.grid(row=0, column=column, sticky="ew", padx=(0, 7) if column == 0 else (7, 0))
@@ -285,10 +268,10 @@ def main():
 
     actions = ttk.Frame(panel)
     actions.pack(fill="x", pady=(20, 0))
-    buttons = [ttk.Button(actions, style="Record.TButton", text="Kaydı başlat", command=lambda: stop() if busy else start(True)),
-               ttk.Button(tk.Frame(actions, bg="#e3e0dd"), style="Play.TButton", text="Kayıt dosyasını oynat",
+    buttons = [ttk.Button(actions, style="Primary.TButton", text="Kaydı başlat", command=lambda: stop() if busy else start(True)),
+               ttk.Button(tk.Frame(actions, bg=theme.BORDER), style="Outline.TButton", text="Kayıt dosyasını oynat",
                           command=lambda: open_recording(True)),
-               ttk.Button(actions, style="Inspect.TButton", text="Kaydı incele", command=lambda: open_recording(False))]
+               ttk.Button(actions, style="Text.TButton", text="Kaydı incele", command=lambda: open_recording(False))]
     actions.rowconfigure(0, minsize=48)
     for col, button in enumerate(buttons):
         actions.columnconfigure(col * 2, weight=1, uniform="actions")
@@ -299,9 +282,9 @@ def main():
             button.pack(fill="both", expand=True, padx=1, pady=1)
         if col < len(buttons) - 1:
             actions.columnconfigure(col * 2 + 1, minsize=14)
-    journal = tk.Frame(sidebar, bg=white, highlightbackground="#e4dfdb", highlightthickness=1)
+    journal = tk.Frame(sidebar, bg=white, highlightbackground=theme.BORDER, highlightthickness=1)
     journal.pack(fill="both", expand=True, padx=7, pady=16)
-    tk.Label(journal, text="∿    İşlem günlüğü", bg="#f8f7f6", fg=ink,
+    tk.Label(journal, text="∿    İşlem günlüğü", bg=theme.MUTED_SURFACE, fg=ink,
              anchor="w", padx=14, pady=8).pack(fill="x")
     history = tk.Text(journal, height=3, width=1, bg=white, fg=ink, wrap="word",
                       relief="flat", highlightthickness=0, padx=12, pady=8, state="disabled")
@@ -317,7 +300,7 @@ def main():
         history.configure(state="disabled")
 
     ttk.Frame(panel).pack(fill="both", expand=True)
-    tk.Frame(panel, height=1, bg="#e5dfdb").pack(fill="x")
+    tk.Frame(panel, height=1, bg=theme.BORDER).pack(fill="x")
     footer = ttk.Frame(panel)
     footer.pack(fill="x", pady=(10, 0))
     ttk.Label(footer, text="Durum", foreground=muted).pack(side="left")
@@ -326,8 +309,8 @@ def main():
 
     def paint_status(*_):
         ready = status.get() == "Hazır"
-        badge.configure(text="● " + status.get(), bg="#edf8ef" if ready else "#fdf1ef",
-                        fg="#277b43" if ready else red)
+        badge.configure(text="● " + status.get(), bg=theme.SUCCESS_SURFACE if ready else theme.SELECTED,
+                        fg=theme.SUCCESS if ready else red)
     status.trace_add("write", paint_status)
     paint_status()
 
