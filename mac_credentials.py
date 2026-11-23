@@ -40,6 +40,16 @@ class Keyring:
         finally:
             free(None, secret)
 
+    def has_password(self, service, account):
+        """Whether the item exists. Does not read the secret, so macOS never asks for access."""
+        service, account = service.encode(), account.encode()
+        status = find(None, len(service), service, len(account), account, None, None, None)
+        if status == NOT_FOUND:
+            return False
+        if status:
+            raise ValueError(f"Anahtar Zinciri okuma hatası ({status}).")
+        return True
+
     def delete_password(self, service, account):
         """Delete the item. Returns False when there was nothing to delete."""
         service, account = service.encode(), account.encode()

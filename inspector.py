@@ -3,7 +3,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import theme
-from recorder import CLICK_COORDINATES, delete_credentials, save_recording, stored_credentials
+from recorder import (CLICK_COORDINATES, delete_credentials, missing_credentials, origin_of,
+                      save_credentials, save_recording, stored_credentials)
 
 
 class StepDialog(simpledialog.Dialog):
@@ -67,6 +68,52 @@ class StepDialog(simpledialog.Dialog):
         self.result["selector"] = selector
         if self.value is not None:
             self.result["value"] = self.value.get("1.0", "end-1c")
+
+
+class PasswordDialog(simpledialog.Dialog):
+    """Ask for the password of a recording's login; it is stored on this device only."""
+
+    def __init__(self, parent, origin):
+        self.origin = origin
+        super().__init__(parent, title="Parolayı gir")
+
+    def body(self, master):
+        self.configure(bg=theme.WHITE)
+        master.configure(bg=theme.WHITE, padx=10, pady=6)
+        master.pack_configure(fill="both", expand=True)
+        tk.Label(master, text="Parolayı gir", bg=theme.WHITE, fg=theme.INK,
+                 font=theme.font(17, True)).pack(anchor="w")
+        theme.divider(master, pady=(10, 12))
+        tk.Label(master, text=f"Bu kayıt {self.origin} adresinde parola kullanıyor. Parola yalnızca bu cihazda "
+                              "saklanır, kayıt dosyasına yazılmaz.",
+                 bg=theme.WHITE, fg=theme.MUTED, font=theme.font(12), justify="left", wraplength=420).pack(anchor="w")
+        tk.Label(master, text="Parola", bg=theme.WHITE, fg=theme.INK,
+                 font=theme.font(12, True)).pack(anchor="w", pady=(14, 6))
+        holder, self.password = theme.entry(master, show="•", width=40)
+        holder.pack(fill="x")
+        self.error = tk.Label(master, bg=theme.WHITE, fg=theme.RED, font=theme.font(12), anchor="w")
+        self.password.bind("<Key>", lambda _: self.error.pack_forget(), add="+")
+        return self.password
+
+    def buttonbox(self):
+        box = tk.Frame(self, bg=theme.WHITE, padx=20, pady=16)
+        box.pack(fill="x")
+        save, _ = theme.button(box, "Kaydet", self.ok, "Primary", "Medium.")
+        save.pack(side="right")
+        cancel, _ = theme.button(box, "İptal", self.cancel, "Outline", "Medium.")
+        cancel.pack(side="right", padx=(0, 8))
+        self.password.bind("<Return>", self.ok)
+        self.bind("<Escape>", self.cancel)
+
+    def validate(self):
+        if self.password.get():
+            return True
+        self.error.configure(text="⚠  Parola boş bırakılamaz.")
+        self.error.pack(anchor="w", fill="x", pady=(10, 0))
+        return False
+
+    def apply(self):
+        self.result = self.password.get()
 
 
 class RecordingInspector(tk.Toplevel):
@@ -146,10 +193,13 @@ class RecordingInspector(tk.Toplevel):
         holder.pack(side="right")
         holder, self.save_button = theme.button(file_actions, "Kopyasını kaydet", self.save_copy, "Outline", "Medium.")
         holder.pack(side="right", padx=(0, 8))
-        holder, self.forget_button = theme.button(file_actions, "Parolayı cihazdan sil", self.forget_password,
-                                                  "Text", "Medium.")
-        if stored_credentials(self.data):
-            holder.pack(side="left")
+        # Exactly one of these shows for recordings with a password step, depending on this device.
+        self.forget_holder, self.forget_button = theme.button(
+            file_actions, "Parolayı cihazdan sil", self.forget_password, "Text", "Medium.")
+        self.enter_holder, self.enter_button = theme.button(
+            file_actions, "Parolayı gir", self.enter_password, "Text", "Medium.")
+        self.password_missing = False
+        self.refresh_password_state()
         self.refresh_steps()
 
     @property
@@ -171,6 +221,7 @@ class RecordingInspector(tk.Toplevel):
             (self.play_button, not self.busy),
             (self.save_button, not self.busy),
             (self.forget_button, not self.busy),
+            (self.enter_button, not self.busy),
         ):
             button.state(["!disabled" if enabled else "disabled"])
 
@@ -209,7 +260,7 @@ class RecordingInspector(tk.Toplevel):
             value = "Enter" if step["action"] == "keydown" else step.get("value", "")
             action = theme.ACTION_LABELS.get(step["action"], step["action"])
             if step["action"] == "password":
-                value = "Cihazda saklanan parola"
+                value = "Parola girilmemiş" if self.password_missing else "Cihazda saklanan parola"
             elif step["action"] == "select":
                 value = ", ".join(step["values"])
             self.table.insert("", "end", iid=str(index),
@@ -283,6 +334,38 @@ class RecordingInspector(tk.Toplevel):
             messagebox.showerror("Parolayı cihazdan sil", str(exc), parent=self)
             return
         self.detail.set("Parola cihazdan silindi." if found else "Bu kayıt için cihazda saklanan parola bulunamadı.")
+        self.refresh_password_state()
+
+    def enter_password(self):
+        if self.busy or not stored_credentials(self.data):
+            return
+        origin = origin_of(next(s["url"] for s in self.steps if s["action"] == "password"))
+        dialog = PasswordDialog(self, origin)
+        if dialog.result is None:
+            return
+        try:
+            save_credentials(self.data, dialog.result)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Parolayı gir", str(exc), parent=self)
+            return
+        self.detail.set("Parola bu cihaza kaydedildi.")
+        self.refresh_password_state()
+
+    def refresh_password_state(self):
+        """Show "Parolayı cihazdan sil" when the password is stored, "Parolayı gir" when it is missing."""
+        self.forget_holder.pack_forget()
+        self.enter_holder.pack_forget()
+        if not stored_credentials(self.data):
+            self.password_missing = False
+        else:
+            try:
+                self.password_missing = bool(missing_credentials(self.data))
+            except (OSError, ValueError):
+                self.password_missing = False  # store unavailable: offer removal, which reports the error
+            (self.enter_holder if self.password_missing else self.forget_holder).pack(side="left")
+        if self.table.get_children():
+            selected = self.selected_index()
+            self.refresh_steps(selected)
 
     def confirm_discard(self):
         return not self.dirty or messagebox.askyesno(
