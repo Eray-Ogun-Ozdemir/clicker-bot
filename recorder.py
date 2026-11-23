@@ -52,11 +52,47 @@ def pause(page, seconds, control):
 def credential_store():
     if sys.platform == "darwin":
         from mac_credentials import Keyring
-    elif sys.platform == "win32":
-        from keyring.backends.Windows import WinVaultKeyring as Keyring
-    else:
-        raise ValueError("Parola saklama macOS ve Windows üzerinde destekleniyor.")
-    return Keyring()
+        return Keyring()
+    if sys.platform == "win32":
+        from keyring.backends.Windows import WinVaultKeyring
+        return WindowsStore(WinVaultKeyring())
+    raise ValueError("Parola saklama macOS ve Windows üzerinde destekleniyor.")
+
+
+class WindowsStore:
+    """Credential Manager with the same delete_password contract as mac_credentials."""
+
+    def __init__(self, backend):
+        self.backend = backend
+        self.get_password = backend.get_password
+        self.set_password = backend.set_password
+
+    def delete_password(self, service, account):
+        from keyring.errors import PasswordDeleteError
+        try:
+            self.backend.delete_password(service, account)
+        except PasswordDeleteError:
+            return False
+        return True
+
+
+def credential_service(url):
+    return "Clicker Bot " + origin_of(url)
+
+
+def stored_credentials(data):
+    """(service, account) pairs of the passwords a recording refers to."""
+    return sorted({(credential_service(step["url"]), step["credential"])
+                   for step in data["steps"] if step["action"] == "password" and step.get("credential")})
+
+
+def delete_credentials(data):
+    """Remove the recording's passwords from this device. Returns how many were found."""
+    pairs = stored_credentials(data)
+    if not pairs:
+        return 0
+    store = credential_store()
+    return sum(store.delete_password(service, account) for service, account in pairs)
 
 
 def origin_of(url):
@@ -86,7 +122,7 @@ def play(page, step):
     target = page.locator(step["selector"])
     if step["action"] == "password":
         origin = origin_of(step["url"])
-        password = credential_store().get_password("Clicker Bot " + origin, step["credential"])
+        password = credential_store().get_password(credential_service(step["url"]), step["credential"])
         if password is None:
             raise ValueError("Bu kayıt için cihazda saklanan parola bulunamadı.")
         fill_password(target, origin, password)
@@ -189,8 +225,13 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
                         steps.append(dict(action=kind, url=step["url"], selector=step["selector"], credential=reference))
                     else:
                         target.fill(credentials[kind], timeout=3000)
-                        steps.append(dict(action="input", url=step["url"], selector=step["selector"], value=credentials[kind]))
+                        # fill() also fires an input event that capture.js may report first; merge with it.
+                        add(dict(action="input", url=step["url"], selector=step["selector"], value=credentials[kind]))
                     return
+                add(step)
+
+            def add(step):
+                steps = data["steps"]
                 if step["action"] == "input" and steps and all(
                     steps[-1].get(k) == step[k] for k in ("action", "url", "selector")
                 ):
@@ -208,10 +249,15 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
             if control.cancelled:
                 status("Kayıt iptal edildi. Dosya oluşturulmadı.")
                 return
-            if "password" in references:
-                credential_store().set_password("Clicker Bot " + origin_of(url_to_record),
-                                                references["password"], credentials["password"])
+            # Write the file first: a password is only stored once a recording refers to it.
             save_recording(file, data)
+            if "password" in references:
+                try:
+                    credential_store().set_password(credential_service(url_to_record),
+                                                    references["password"], credentials["password"])
+                except Exception:
+                    file.unlink(missing_ok=True)
+                    raise
             status(f'{len(data["steps"])} adım kaydedildi: {file}')
         else:
             total = len(data["steps"])

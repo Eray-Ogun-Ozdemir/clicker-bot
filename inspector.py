@@ -2,7 +2,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from recorder import CLICK_COORDINATES, save_recording
+from recorder import CLICK_COORDINATES, delete_credentials, save_recording, stored_credentials
 
 
 class StepDialog(simpledialog.Dialog):
@@ -92,6 +92,9 @@ class RecordingInspector(tk.Toplevel):
         self.play_button.pack(side="right")
         self.save_button = ttk.Button(file_actions, text="Kopyasını kaydet", command=self.save_copy)
         self.save_button.pack(side="right", padx=(0, 4))
+        self.forget_button = ttk.Button(file_actions, text="Parolayı cihazdan sil", command=self.forget_password)
+        if stored_credentials(self.data):
+            self.forget_button.pack(side="left")
         self.refresh_steps()
 
     @property
@@ -112,6 +115,7 @@ class RecordingInspector(tk.Toplevel):
             (self.down_button, selected and index < len(self.steps) - 1),
             (self.play_button, not self.busy),
             (self.save_button, not self.busy),
+            (self.forget_button, not self.busy),
         ):
             button.state(["!disabled" if enabled else "disabled"])
 
@@ -188,6 +192,20 @@ class RecordingInspector(tk.Toplevel):
         self.dirty = False
         self.detail.set(f"Kopya kaydedildi · {path.name}")
         self.refresh_summary()
+
+    def forget_password(self):
+        if self.busy or not messagebox.askyesno(
+                "Parolayı cihazdan sil",
+                "Bu kayıt için saklanan parola Anahtar Zinciri / Kimlik Bilgisi Yöneticisi'nden silinecek. "
+                "Bu kaydı ve kopyalarını oynatmak için parolalı adımı yeniden kaydetmen gerekecek. Devam edilsin mi?",
+                icon="warning", parent=self):
+            return
+        try:
+            found = delete_credentials(self.data)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Parolayı cihazdan sil", str(exc), parent=self)
+            return
+        self.detail.set("Parola cihazdan silindi." if found else "Bu kayıt için cihazda saklanan parola bulunamadı.")
 
     def confirm_discard(self):
         return not self.dirty or messagebox.askyesno(
