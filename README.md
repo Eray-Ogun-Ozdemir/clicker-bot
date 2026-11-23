@@ -57,6 +57,6 @@ python recorder.py play session.json
 
 ## Mascot behavior
 
-The llama holds a camera while recording and a tablet during playback. After ten seconds of playback, it switches to the TV pose. Errors have a dedicated pose. Each available transition plays once and settles on its destination image.
+The llama holds a camera while recording and a tablet during playback. After ten seconds of playback, it switches to the TV pose. Errors have a dedicated pose. Poses switch directly, without transition animations.
 
 While the app is idle, the llama holds its tea pose for one minute and its hourglass and impatient poses for ten seconds each. After three minutes without interaction, it falls asleep. Returning focus to the window or using the mouse or keyboard wakes it.
