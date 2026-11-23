@@ -17,7 +17,7 @@
   }
   document.addEventListener('focusin', event => {
     const el = event.target;
-    if (!event.isTrusted || !(el instanceof HTMLInputElement)) return;
+    if (!event.isTrusted || !(el instanceof HTMLInputElement)) return;  // the control bar is a shadow host, not an input
     let kind;
     if (el.type === 'password') kind = 'password';
     else if (['text', 'email'].includes(el.type) &&
@@ -26,6 +26,7 @@
   }, true);
   function record(event) {
     if (!event.isTrusted || !(event.target instanceof Element)) return;
+    if (event.target.localName === 'clicker-bot-overlay') return;  // Bitir / İptal / Durdur bar
     let el = event.target;
     const action = event.type;
     const step = {action, url: location.href};

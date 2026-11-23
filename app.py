@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 
 from mascot import Mascot
 from inspector import RecordingInspector
-from recorder import load_recording, run
+from recorder import Control, load_recording, run
 
 URL_MESSAGE = "http:// veya https:// ile başlayan bir URL gir. Örnek: https://example.com"
 
@@ -165,6 +165,13 @@ def main():
 
     inspector = None
     active_step = None
+    control = None
+
+    def stop():
+        if control and not control.stopped:
+            control.stop()
+            buttons[0].state(["disabled"])
+            log("Durduruluyor…")
 
     def open_recording(autoplay):
         nonlocal inspector
@@ -192,7 +199,7 @@ def main():
             start(False, path, data)
 
     def start(recording, path=None, data=None):
-        nonlocal busy, active_step
+        nonlocal busy, active_step, control
         if busy:
             return
         address = url.get().strip() if recording else None
@@ -222,8 +229,10 @@ def main():
                 inspector.detail.set("")
                 inspector.table.selection_remove(*inspector.table.selection())
         busy = True
+        control = Control()
         mascot.move("recording" if recording else "playing")
-        for button in buttons:
+        buttons[0].configure(text="■   Kaydı bitir" if recording else "■   Oynatmayı durdur")
+        for button in buttons[1:]:
             button.state(["disabled"])
         status.set("Kaydediliyor" if recording else "Oynatılıyor")
         log("Tarayıcı açılıyor…")
@@ -232,7 +241,7 @@ def main():
             try:
                 def report(msg):
                     events.put(("status", msg))
-                run(Path(path), address, report, data=data, credentials=credentials,
+                run(Path(path), address, report, data=data, credentials=credentials, control=control,
                     on_step=lambda index: events.put(("step", index)))
             except Exception as exc:
                 events.put(("error", str(exc)))
@@ -254,6 +263,7 @@ def main():
                 if status.get() != "Hata":
                     mascot.move("idle")
                     status.set("Hazır")
+                buttons[0].configure(text="Kaydı başlat")
                 for button in buttons:
                     button.state(["!disabled"])
             elif kind == "step":
@@ -275,7 +285,7 @@ def main():
 
     actions = ttk.Frame(panel)
     actions.pack(fill="x", pady=(20, 0))
-    buttons = [ttk.Button(actions, style="Record.TButton", text="Kaydı başlat", command=lambda: start(True)),
+    buttons = [ttk.Button(actions, style="Record.TButton", text="Kaydı başlat", command=lambda: stop() if busy else start(True)),
                ttk.Button(tk.Frame(actions, bg="#e3e0dd"), style="Play.TButton", text="Kayıt dosyasını oynat",
                           command=lambda: open_recording(True)),
                ttk.Button(actions, style="Inspect.TButton", text="Kaydı incele", command=lambda: open_recording(False))]
@@ -323,7 +333,7 @@ def main():
 
     def close():
         if busy:
-            messagebox.showinfo("Clicker Bot", "Önce işlem yapılan tarayıcı sekmesini kapat.")
+            messagebox.showinfo("Clicker Bot", "Önce tarayıcıdaki Bitir veya Durdur düğmesini kullan.")
         elif inspector is None or inspector.confirm_discard():
             root.destroy()
     root.protocol("WM_DELETE_WINDOW", close)

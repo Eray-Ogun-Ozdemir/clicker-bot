@@ -37,8 +37,8 @@ To build a standalone executable on Windows, run `build-windows.cmd`. The script
 1. Enter the starting URL under **Başlangıç URL’si**. Include `http://` or `https://`.
 2. Click **Kaydı başlat** (Start recording) and choose a new JSON filename.
 3. Interact with the page in the browser window. The recorder captures clicks, text edits in supported fields, dropdown selections and Enter presses in inputs on the main page.
-4. Close the recording tab to finish and save. Recorded text values are stored in the JSON file, so review it before sharing.
-5. Click **Kayıt dosyasını oynat** (Replay recording) and select the saved file. Playback opens the recorded URL, waits one to two seconds between actions and closes the browser on completion.
+4. A red frame and a control bar appear in the browser. Click **Bitir** (Finish) to save, or **İptal** (Cancel) to close without creating a file. Closing the tab or clicking **Kaydı bitir** in the app also saves. Recorded text values are stored in the JSON file, so review it before sharing.
+5. Click **Kayıt dosyasını oynat** (Replay recording) and select the saved file. Playback opens the recorded URL, waits one to two seconds between actions and closes the browser on completion. The bar in the browser shows the current step; **Durdur** (Stop) there, **Oynatmayı durdur** in the app, or closing the tab stops playback after the current step.
 
 ### Account details
 
