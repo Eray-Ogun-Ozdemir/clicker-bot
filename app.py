@@ -30,6 +30,31 @@ def main():
                                     ("/", theme.SLASH, False, 14), ("Çalışma alanım", muted, False, 0)):
         tk.Label(bar, text=text, bg=theme.BAR, fg=color, pady=12,
                  font=(theme.FAMILY, 12, "bold" if bold else "normal")).pack(side="left", padx=padx)
+
+    # "Görünüm" segmented control: follow the system, or keep the app light or dark.
+    appearance = tk.Frame(bar, bg=theme.BAR)
+    appearance.pack(side="right", padx=16)
+    tk.Label(appearance, text="Görünüm", bg=theme.BAR, fg=muted,
+             font=(theme.FAMILY, 11)).pack(side="left", padx=(0, 8))
+    segment_box, segments = theme.bordered(appearance, theme.BORDER, theme.BAR)
+    segment_box.pack(side="left")
+    appearance_options = {}
+    for value, text in (("system", "Sistem"), ("light", "Açık"), ("dark", "Koyu")):
+        option = tk.Label(segments, text=text, padx=10, pady=3, cursor="hand2", takefocus=1,
+                          highlightthickness=1, highlightbackground=theme.BAR, highlightcolor=theme.RED)
+        option.pack(side="left")
+        for event in ("<Button-1>", "<Return>", "<space>"):
+            option.bind(event, lambda _, v=value: theme.set_preference(root, v))
+        appearance_options[value] = option
+
+    def paint_appearance():
+        for value, option in appearance_options.items():
+            chosen = theme.PREFERENCE == value
+            option.configure(bg=theme.SELECTED if chosen else theme.BAR, fg=theme.RED if chosen else theme.MUTED,
+                             highlightbackground=theme.SELECTED if chosen else theme.BAR,
+                             font=(theme.FAMILY, 11, "bold" if chosen else "normal"))
+    paint_appearance()
+    theme.on_palette_change(paint_appearance)
     tk.Frame(root, bg=theme.BORDER, height=1).pack(fill="x")
     body = tk.Frame(root, bg=white)
     body.pack(fill="both", expand=True)

@@ -2,13 +2,16 @@
 
 The values follow the Lovable design preview (project "Clicker Bot"). Change a colour or size
 here and every window picks it up. There is a light and a dark palette with the same names;
-apply() picks one from the operating system's appearance before any widget is created.
-Set CLICKER_BOT_THEME=light or =dark to override the system setting.
+apply() picks one before any widget is created and switches live afterwards. The choice comes,
+in order, from CLICKER_BOT_THEME=light/dark, the in-app "Görünüm" setting (Sistem / Açık / Koyu,
+saved in settings.json in the user's application data folder), and the operating system.
 """
+import json
 import os
 import subprocess
 import sys
 import tkinter as tk
+from pathlib import Path
 from tkinter import font as tkfont, ttk
 
 LIGHT = {
@@ -72,11 +75,73 @@ def use_palette(dark):
     globals().update(DARK if dark else LIGHT)
 
 
-def system_prefers_dark(root=None):
-    """Whether the operating system (or CLICKER_BOT_THEME) asks for dark mode."""
+PREFERENCES = ("system", "light", "dark")
+PREFERENCE = "system"
+
+
+def settings_path():
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support" / "Clicker Bot"
+    elif sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA") or Path.home()) / "Clicker Bot"
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "clicker-bot"
+    return base / "settings.json"
+
+
+def _read_settings():
+    try:
+        data = json.loads(settings_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def load_preference():
+    value = _read_settings().get("appearance")
+    return value if value in PREFERENCES else "system"
+
+
+def save_preference(value):
+    data = _read_settings()
+    data["appearance"] = value
+    path = settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def wants_dark(root=None):
+    """The palette to show: CLICKER_BOT_THEME, then the in-app setting, then the system."""
     choice = os.environ.get("CLICKER_BOT_THEME", "").strip().lower()
     if choice in ("light", "dark"):
         return choice == "dark"
+    if PREFERENCE in ("light", "dark"):
+        return PREFERENCE == "dark"
+    return system_prefers_dark(root)
+
+
+def set_preference(root, value):
+    """Apply the in-app "Görünüm" choice now and remember it for the next start."""
+    global PREFERENCE
+    if value not in PREFERENCES:
+        return
+    PREFERENCE = value
+    try:
+        save_preference(value)
+    except OSError:
+        pass  # cannot write the settings file: keep the choice for this session
+    dark = wants_dark(root)
+    if dark != DARK_MODE:
+        switch_palette(root, dark)
+    else:
+        for callback in _listeners:
+            callback()
+
+
+def system_prefers_dark(root=None):
+    """Whether the operating system is in dark mode."""
     if sys.platform == "darwin":
         try:  # set by both the "Koyu" and the "Otomatik" appearance while it is dark
             style = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"],
@@ -127,20 +192,22 @@ def apply(root):
     Call it before creating any widget. While the app runs, the system appearance is checked every
     few seconds; when it changes, every window is repainted in place (see switch_palette).
     """
-    use_palette(system_prefers_dark(root))
+    global PREFERENCE
+    PREFERENCE = load_preference()
+    use_palette(wants_dark(root))
     style = _style(root)
     root.after(CHECK_EVERY_MS, lambda: _watch(root))
     return style
 
 
 def on_palette_change(callback):
-    """Call callback() after the palette switches, e.g. to swap images."""
+    """Call callback() after the palette or the appearance setting changes, e.g. to swap images."""
     _listeners.append(callback)
 
 
 def _watch(root):
     try:
-        dark = system_prefers_dark(root)
+        dark = wants_dark(root)
         if dark != DARK_MODE:
             switch_palette(root, dark)
     finally:

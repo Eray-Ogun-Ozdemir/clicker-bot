@@ -57,7 +57,7 @@ python recorder.py play session.json
 
 ## Appearance
 
-Clicker Bot opens in a light or dark palette that matches the system appearance: the macOS **Açık**, **Koyu** and **Otomatik** settings, or the Windows app mode. When the system appearance changes while the app is open, every window switches within a couple of seconds, keeping what you have typed and any recording or playback in progress. To force a palette, set `CLICKER_BOT_THEME=light` or `CLICKER_BOT_THEME=dark` before starting it. All colours, fonts and button styles are defined in `theme.py`.
+Clicker Bot opens in a light or dark palette that matches the system appearance: the macOS **Açık**, **Koyu** and **Otomatik** settings, or the Windows app mode. When the system appearance changes while the app is open, every window switches within a couple of seconds, keeping what you have typed and any recording or playback in progress. Use **Görünüm** in the top bar to choose **Sistem** (follow the system), **Açık** or **Koyu**. The choice applies at once and is remembered in `settings.json` in the app's data folder (`~/Library/Application Support/Clicker Bot` on macOS, `%APPDATA%\Clicker Bot` on Windows). For testing, `CLICKER_BOT_THEME=light` or `CLICKER_BOT_THEME=dark` overrides both. All colours, fonts and button styles are defined in `theme.py`.
 
 ## Mascot behavior
 
