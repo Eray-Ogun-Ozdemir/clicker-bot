@@ -67,6 +67,9 @@ class WindowsStore:
         self.get_password = backend.get_password
         self.set_password = backend.set_password
 
+    def has_password(self, service, account):
+        return self.backend.get_password(service, account) is not None
+
     def delete_password(self, service, account):
         from keyring.errors import PasswordDeleteError
         try:
@@ -84,6 +87,27 @@ def stored_credentials(data):
     """(service, account) pairs of the passwords a recording refers to."""
     return sorted({(credential_service(step["url"]), step["credential"])
                    for step in data["steps"] if step["action"] == "password" and step.get("credential")})
+
+
+def missing_credentials(data):
+    """The recording's password references that have no stored password on this device."""
+    pairs = stored_credentials(data)
+    if not pairs:
+        return []
+    store = credential_store()
+    return [pair for pair in pairs if not store.has_password(*pair)]
+
+
+def save_credentials(data, password):
+    """Store (or replace) the password for every password step of the recording on this device."""
+    pairs = stored_credentials(data)
+    if not password or not pairs:
+        raise ValueError("Kaydedilecek parola bulunamadı.")
+    store = credential_store()
+    for service, account in pairs:
+        store.delete_password(service, account)
+        store.set_password(service, account, password)
+    return len(pairs)
 
 
 def delete_credentials(data):
@@ -124,7 +148,8 @@ def play(page, step):
         origin = origin_of(step["url"])
         password = credential_store().get_password(credential_service(step["url"]), step["credential"])
         if password is None:
-            raise ValueError("Bu kayıt için cihazda saklanan parola bulunamadı.")
+            raise ValueError("Bu kayıt için cihazda saklanan parola bulunamadı. "
+                             "Kaydı incele penceresindeki Parolayı gir ile ekleyebilirsin.")
         fill_password(target, origin, password)
     elif step["action"] == "input":
         target.fill(step["value"], timeout=5000)
