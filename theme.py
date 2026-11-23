@@ -40,7 +40,7 @@ DARK = {
     "BG": "#1f1b1a",
     "INK": "#f2ece9",
     "MUTED": "#b0a7a3",
-    "HINT": "#857d79",
+    "HINT": "#9a928e",
     "RED": "#f0726a",
     "PRIMARY": "#c23430",
     "PRIMARY_HOVER": "#a82c28",
@@ -49,7 +49,7 @@ DARK = {
     "SELECTED": "#3a2422",
     "SELECTED_BORDER": "#8a3f39",
     "CARD_SELECTED": "#2f2120",
-    "CARD_DISABLED_TEXT": "#8f8783",
+    "CARD_DISABLED_TEXT": "#9b938f",  # distinct from HINT so live switching maps it back correctly
     "BORDER": "#3a3331",
     "FIELD_BORDER": "#4a4240",
     "BADGE_RING": "#4a4240",
@@ -114,9 +114,76 @@ def mono(size=12):
     return (tkfont.nametofont("TkFixedFont").actual("family"), size)
 
 
+CHECK_EVERY_MS = 2000
+COLOR_OPTIONS = ("background", "foreground", "highlightbackground", "highlightcolor", "insertbackground",
+                 "disabledbackground", "disabledforeground", "selectbackground", "selectforeground",
+                 "activebackground", "activeforeground", "readonlybackground")
+_listeners = []
+
+
 def apply(root):
-    """Pick the palette from the system appearance and configure the ttk styles. Call it first."""
+    """Pick the palette from the system appearance, style ttk, and follow later appearance changes.
+
+    Call it before creating any widget. While the app runs, the system appearance is checked every
+    few seconds; when it changes, every window is repainted in place (see switch_palette).
+    """
     use_palette(system_prefers_dark(root))
+    style = _style(root)
+    root.after(CHECK_EVERY_MS, lambda: _watch(root))
+    return style
+
+
+def on_palette_change(callback):
+    """Call callback() after the palette switches, e.g. to swap images."""
+    _listeners.append(callback)
+
+
+def _watch(root):
+    try:
+        dark = system_prefers_dark(root)
+        if dark != DARK_MODE:
+            switch_palette(root, dark)
+    finally:
+        if root.winfo_exists():
+            root.after(CHECK_EVERY_MS, lambda: _watch(root))
+
+
+def switch_palette(root, dark):
+    """Repaint every existing widget with the other palette, keeping all their contents and state."""
+    old = DARK if DARK_MODE else LIGHT
+    use_palette(dark)
+    new = DARK if dark else LIGHT
+    mapping = {}
+    for key, value in old.items():  # first name wins where two names share a colour
+        mapping.setdefault(value.lower(), new[key])
+    _style(root)
+    _recolor(root, mapping)
+    for callback in _listeners:
+        callback()
+
+
+def _recolor(widget, mapping):
+    for option in COLOR_OPTIONS:
+        try:
+            value = str(widget.cget(option)).lower()
+        except tk.TclError:
+            continue  # ttk widgets take most colours from their style instead
+        if value in mapping:
+            widget.configure({option: mapping[value]})
+    if isinstance(widget, tk.Canvas):
+        for item in widget.find_all():
+            for option in ("fill", "outline"):
+                try:
+                    value = widget.itemcget(item, option).lower()
+                except tk.TclError:
+                    continue
+                if value in mapping:
+                    widget.itemconfigure(item, {option: mapping[value]})
+    for child in widget.winfo_children():
+        _recolor(child, mapping)
+
+
+def _style(root):
     root.configure(bg=BG)
     style = ttk.Style(root)
     style.theme_use("clam")

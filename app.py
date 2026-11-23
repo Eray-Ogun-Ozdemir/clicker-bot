@@ -88,11 +88,11 @@ def main():
     def show_url_error(message):
         url_error.configure(text="⚠  " + message)
         url_error.pack(after=field, fill="x", pady=(8, 0))
-        field.configure(bg=red)
+        field.configure(bg=theme.RED)
 
     def clear_url_error():
         url_error.pack_forget()
-        field.configure(bg=red if root.focus_get() == url else theme.FIELD_BORDER)
+        field.configure(bg=theme.RED if root.focus_get() == url else theme.FIELD_BORDER)
 
     def valid_url(address):
         try:
@@ -115,7 +115,7 @@ def main():
             show_url_error(URL_MESSAGE)
         elif not url_error.winfo_ismapped():
             field.configure(bg=theme.FIELD_BORDER)
-    url.bind("<FocusIn>", lambda _: field.configure(bg=red))
+    url.bind("<FocusIn>", lambda _: field.configure(bg=theme.RED))
     url.bind("<FocusOut>", leave_url)
     url.focus_set()
     ttk.Frame(panel, height=18).pack()
@@ -309,7 +309,7 @@ def main():
     def paint_status(*_):
         ready = status.get() == "Hazır"
         badge.configure(text="● " + status.get(), bg=theme.SUCCESS_SURFACE if ready else theme.SELECTED,
-                        fg=theme.SUCCESS if ready else red)
+                        fg=theme.SUCCESS if ready else theme.RED)
     status.trace_add("write", paint_status)
     paint_status()
 
