@@ -15,6 +15,15 @@
     }
     return 'html > ' + path.join(' > ');
   }
+  document.addEventListener('focusin', event => {
+    const el = event.target;
+    if (!event.isTrusted || !(el instanceof HTMLInputElement)) return;
+    let kind;
+    if (el.type === 'password') kind = 'password';
+    else if (['text', 'email'].includes(el.type) &&
+             (el.type === 'email' || /username|user.name|login|email/i.test([el.autocomplete, el.id, el.name].join(' ')))) kind = 'username';
+    if (kind) window.recordAction({action: 'accountFocus', kind, selector: selector(el), url: location.href});
+  }, true);
   function record(event) {
     if (!event.isTrusted || !(event.target instanceof Element)) return;
     let el = event.target;
@@ -27,6 +36,10 @@
         const box = el.getBoundingClientRect();
         step.position = {x: event.clientX - box.left - el.clientLeft, y: event.clientY - box.top - el.clientTop};
       }
+    } else if (action === 'change') {
+      if (!el.matches('select')) return;
+      step.action = 'select';
+      step.values = Array.from(el.selectedOptions, option => option.value);
     } else if (action === 'keydown') {
       if (event.key !== 'Enter' || !el.matches('input')) return;
     } else {
@@ -37,5 +50,5 @@
     Object.assign(step, {selector: selector(el), tag: el.localName});
     window.recordAction(step);
   }
-  for (const event of ['click', 'input', 'keydown']) document.addEventListener(event, record, true);
+  for (const event of ['click', 'input', 'change', 'keydown']) document.addEventListener(event, record, true);
 })();

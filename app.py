@@ -9,6 +9,8 @@ from mascot import Mascot
 from inspector import RecordingInspector
 from recorder import load_recording, run
 
+URL_MESSAGE = "http:// veya https:// ile başlayan bir URL gir. Örnek: https://example.com"
+
 
 def main():
     root = tk.Tk()
@@ -33,16 +35,20 @@ def main():
     style.map("TEntry", bordercolor=[("focus", red)])
     for name, background, foreground, hover in (
         ("Record.TButton", red, white, "#a62c28"),
-        ("Play.TButton", "#f7f4f2", ink, "#eee8e5"),
+        ("Play.TButton", white, ink, "#f9f8f7"),
+        ("Inspect.TButton", white, red, "#fdf7f6"),
     ):
         style.configure(name, background=background, foreground=foreground,
-                        font=("Helvetica", 13, "bold"), padding=(16, 11), borderwidth=0)
+                        font=("Helvetica", 13, "bold"), padding=(12, 8), relief="flat", borderwidth=0)
         style.map(name, background=[("disabled", "#eeeae8"), ("active", hover)],
                   foreground=[("disabled", muted)])
-    bar = tk.Frame(root, bg="#f6f5f4", height=42)
+    bar = tk.Frame(root, bg="#f6f5f4")
     bar.pack(fill="x")
-    tk.Label(bar, text="Clicker Bot   /   Çalışma alanım", bg="#f6f5f4", fg=ink,
-             font=("Helvetica", 12, "bold"), padx=18, pady=12).pack(side="left")
+    for text, color, bold, padx in (("➤", red, False, (20, 0)), ("Clicker Bot", ink, True, (10, 0)),
+                                    ("/", "#b3ada8", False, 14), ("Çalışma alanım", muted, False, 0)):
+        tk.Label(bar, text=text, bg="#f6f5f4", fg=color, pady=12,
+                 font=("Helvetica", 12, "bold" if bold else "normal")).pack(side="left", padx=padx)
+    tk.Frame(root, bg="#e4dfdb", height=1).pack(fill="x")
     body = tk.Frame(root, bg=white)
     body.pack(fill="both", expand=True)
     sidebar = tk.Frame(body, bg="#faf9f8", width=190)
@@ -50,8 +56,11 @@ def main():
     sidebar.pack_propagate(False)
     tk.Label(sidebar, text="ÇALIŞMA ALANI", bg="#faf9f8", fg=muted,
              font=("Helvetica", 10, "bold"), padx=14, pady=18).pack(anchor="w")
-    tk.Label(sidebar, text="●    Tarayıcı otomasyonu", bg="#fae9e6", fg=red,
-             anchor="w", padx=12, pady=9).pack(fill="x", padx=6)
+    selected = tk.Frame(sidebar, bg="#fdf1ef")
+    selected.pack(fill="x")
+    tk.Frame(selected, bg=red, width=3).pack(side="left", fill="y")
+    tk.Label(selected, text="◍   Tarayıcı otomasyonu", bg="#fdf1ef", fg=ink,
+             anchor="w", padx=12, pady=11).pack(side="left", fill="x", expand=True)
     tk.Frame(body, bg="#e4dfdb", width=1).pack(side="left", fill="y")
     panel = ttk.Frame(body, padding=(24, 18))
     panel.pack(side="left", fill="both", expand=True)
@@ -76,12 +85,15 @@ def main():
         badge.create_text(13, 13, text=number, fill=muted, font=("Helvetica", 10))
         ttk.Label(row, text=title, font=("Helvetica", 15, "bold")).pack(side="left", padx=8)
 
-    section("01", "Başlangıç")
-    ttk.Label(panel, text="Başlangıç URL’si").pack(anchor="w", pady=(12, 5))
-    field = tk.Frame(panel, bg=white, highlightthickness=1, highlightbackground="#ded7d3")
-    field.pack(fill="x")
-    tk.Label(field, text="◎", fg=muted, bg=white).pack(side="left", padx=12)
-    url = tk.Entry(field, relief="flat", bg=white, fg=ink, insertbackground=ink,
+    section("01", "Başlangıç URL’si")
+    # A 1px frame around a white box: Tk on macOS does not draw highlight borders reliably.
+    field = tk.Frame(panel, bg="#ded7d3")
+    field.pack(fill="x", pady=(12, 0))
+    url_box = tk.Frame(field, bg=white)
+    url_box.pack(fill="both", padx=1, pady=1)
+    tk.Label(url_box, text="◎", fg=muted, bg=white).pack(side="left", padx=12)
+    url = tk.Entry(url_box, relief="flat", bg=white, fg=ink, insertbackground=ink,
+                   disabledbackground="#f8f7f6", disabledforeground=muted,
                    highlightthickness=0, font=("Helvetica", 14))
     url.pack(side="left", fill="x", expand=True, ipady=11)
     hint = tk.Label(url, text="https://example.com", bg=white, fg="#a29b96")
@@ -89,14 +101,40 @@ def main():
     hint.bind("<Button-1>", lambda _: url.focus_set())
     address_text = tk.StringVar()
     url.configure(textvariable=address_text)
+    url_error = tk.Label(panel, bg=white, fg=red, anchor="w", font=("Helvetica", 12))
+
+    def show_url_error(message):
+        url_error.configure(text="⚠  " + message)
+        url_error.pack(after=field, fill="x", pady=(8, 0))
+        field.configure(bg=red)
+
+    def clear_url_error():
+        url_error.pack_forget()
+        field.configure(bg=red if root.focus_get() == url else "#ded7d3")
+
+    def valid_url(address):
+        try:
+            parsed = urlsplit(address)
+            return parsed.scheme in ("http", "https") and bool(parsed.hostname)
+        except ValueError:
+            return False
+
     def show_hint(*_):
+        clear_url_error()
         if address_text.get():
             hint.place_forget()
         else:
             hint.place(x=3, rely=0.5, anchor="w")
     address_text.trace_add("write", show_hint)
-    url.bind("<FocusIn>", lambda _: field.configure(highlightbackground=red))
-    url.bind("<FocusOut>", lambda _: field.configure(highlightbackground="#ded7d3"))
+
+    def leave_url(_):
+        address = address_text.get().strip()
+        if address and not valid_url(address):
+            show_url_error(URL_MESSAGE)
+        elif not url_error.winfo_ismapped():
+            field.configure(bg="#ded7d3")
+    url.bind("<FocusIn>", lambda _: field.configure(bg=red))
+    url.bind("<FocusOut>", leave_url)
     url.focus_set()
     ttk.Frame(panel, height=18).pack()
     section("02", "Hazırlama yöntemi")
@@ -106,9 +144,21 @@ def main():
             ("●    Kaydederek hazırla", "#fff8f7", "#eea19a", red),
             ("○    Manuel hazırla     ·  yakında", "#f8f7f6", "#e4dfdb", "#938d88")]):
         modes.columnconfigure(column, weight=1, uniform="cards")
-        tk.Label(modes, text=label, anchor="w", padx=15, pady=15, bg=bg, fg=color,
-                 highlightbackground=border, highlightthickness=1).grid(
-                     row=0, column=column, sticky="ew", padx=(0, 6) if column == 0 else (6, 0))
+        card = tk.Frame(modes, bg=border)
+        card.grid(row=0, column=column, sticky="ew", padx=(0, 7) if column == 0 else (7, 0))
+        tk.Label(card, text=label, anchor="w", padx=18, pady=20, bg=bg, fg=color).pack(
+            fill="x", padx=1, pady=1)
+    ttk.Frame(panel, height=14).pack()
+    section("03", "Hesap bilgileri · isteğe bağlı")
+    account = ttk.Frame(panel)
+    account.pack(fill="x", pady=(6, 0))
+    fields = []
+    for column, label in enumerate(("Kullanıcı adı / e-posta", "Parola")):
+        account.columnconfigure(column, weight=1, uniform="account")
+        ttk.Label(account, text=label).grid(row=0, column=column, sticky="w")
+        entry = ttk.Entry(account, show="•" if column else "")
+        entry.grid(row=1, column=column, sticky="ew", padx=(0, 6) if not column else (0, 0))
+        fields.append(entry)
     status = tk.StringVar(value="Hazır")
     events = queue.Queue()
     busy = False
@@ -122,6 +172,12 @@ def main():
         if not filename:
             return
         path = Path(filename)
+        if inspector and inspector.path == path and inspector.dirty:
+            inspector.deiconify()
+            inspector.lift()
+            if autoplay:
+                start(False, path, inspector.data)
+            return
         try:
             data = load_recording(path)
         except (OSError, ValueError) as exc:
@@ -141,18 +197,24 @@ def main():
             return
         address = url.get().strip() if recording else None
         if recording:
-            try:
-                parsed = urlsplit(address)
-                if parsed.scheme not in ("http", "https") or not parsed.hostname:
-                    raise ValueError
-            except ValueError:
+            if not valid_url(address):
                 mascot.move("fail")
                 status.set("Hata")
-                messagebox.showerror("Adres", "http:// veya https:// ile başlayan bir URL gir.")
+                show_url_error(URL_MESSAGE)
+                url.focus_set()
+                return
+            if any(field.get() for field in fields) and urlsplit(address).scheme != "https":
+                show_url_error("Hesap bilgileri için HTTPS adresi gir.")
                 return
             path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("Bot kaydı", "*.json")])
             if not path:
                 return
+        credentials = dict(zip(("username", "password"), (field.get() for field in fields))) if recording else {}
+        if recording:
+            fields[1].delete(0, "end")
+        for field_entry in fields:
+            field_entry.state(["disabled"])
+        url.configure(state="disabled")
         active_step = None
         if inspector:
             inspector.set_busy(True)
@@ -170,7 +232,7 @@ def main():
             try:
                 def report(msg):
                     events.put(("status", msg))
-                run(Path(path), address, report, data=data,
+                run(Path(path), address, report, data=data, credentials=credentials,
                     on_step=lambda index: events.put(("step", index)))
             except Exception as exc:
                 events.put(("error", str(exc)))
@@ -184,6 +246,9 @@ def main():
             kind, value = events.get()
             if kind == "done":
                 busy = False
+                for field_entry in fields:
+                    field_entry.state(["!disabled"])
+                url.configure(state="normal")
                 if inspector:
                     inspector.set_busy(False)
                 if status.get() != "Hata":
@@ -211,11 +276,19 @@ def main():
     actions = ttk.Frame(panel)
     actions.pack(fill="x", pady=(20, 0))
     buttons = [ttk.Button(actions, style="Record.TButton", text="Kaydı başlat", command=lambda: start(True)),
-               ttk.Button(actions, style="Play.TButton", text="Kayıt dosyasını oynat", command=lambda: open_recording(True)),
-               ttk.Button(actions, text="Kaydı incele", command=lambda: open_recording(False))]
+               ttk.Button(tk.Frame(actions, bg="#e3e0dd"), style="Play.TButton", text="Kayıt dosyasını oynat",
+                          command=lambda: open_recording(True)),
+               ttk.Button(actions, style="Inspect.TButton", text="Kaydı incele", command=lambda: open_recording(False))]
+    actions.rowconfigure(0, minsize=48)
     for col, button in enumerate(buttons):
-        actions.columnconfigure(col, weight=1, uniform="actions")
-        button.grid(row=0, column=col, sticky="ew", padx=(0, 6) if col == 0 else (6, 0))
+        actions.columnconfigure(col * 2, weight=1, uniform="actions")
+        if button.master is actions:
+            button.grid(row=0, column=col * 2, sticky="nsew")
+        else:  # outlined button: its frame supplies the 1px border
+            button.master.grid(row=0, column=col * 2, sticky="nsew")
+            button.pack(fill="both", expand=True, padx=1, pady=1)
+        if col < len(buttons) - 1:
+            actions.columnconfigure(col * 2 + 1, minsize=14)
     journal = tk.Frame(sidebar, bg=white, highlightbackground="#e4dfdb", highlightthickness=1)
     journal.pack(fill="both", expand=True, padx=7, pady=16)
     tk.Label(journal, text="∿    İşlem günlüğü", bg="#f8f7f6", fg=ink,
@@ -238,8 +311,15 @@ def main():
     footer = ttk.Frame(panel)
     footer.pack(fill="x", pady=(10, 0))
     ttk.Label(footer, text="Durum", foreground=muted).pack(side="left")
-    tk.Label(footer, textvariable=status, bg="#edf8ef", fg="#277b43",
-             padx=8, pady=3).pack(side="left", padx=8)
+    badge = tk.Label(footer, padx=8, pady=3)
+    badge.pack(side="left", padx=8)
+
+    def paint_status(*_):
+        ready = status.get() == "Hazır"
+        badge.configure(text="● " + status.get(), bg="#edf8ef" if ready else "#fdf1ef",
+                        fg="#277b43" if ready else red)
+    status.trace_add("write", paint_status)
+    paint_status()
 
     def close():
         if busy:

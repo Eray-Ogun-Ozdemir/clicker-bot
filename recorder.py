@@ -3,6 +3,7 @@ import sys
 import json
 import random
 import time
+import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -12,11 +13,51 @@ from playwright.sync_api import sync_playwright
 CLICK_COORDINATES = ("x", "y", "scrollX", "scrollY")
 
 
+def credential_store():
+    if sys.platform == "darwin":
+        from mac_credentials import Keyring
+    elif sys.platform == "win32":
+        from keyring.backends.Windows import WinVaultKeyring as Keyring
+    else:
+        raise ValueError("Parola saklama macOS ve Windows üzerinde destekleniyor.")
+    return Keyring()
+
+
+def origin_of(url):
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not parts.hostname:
+        raise ValueError("Parola kullanmak için HTTPS adresi gerekli.")
+    return "https://" + parts.netloc.lower()
+
+
+def fill_password(target, origin, password):
+    # Check the document and field in the same call that writes the secret.
+    ok = target.evaluate("""(el, [origin, value]) => {
+        if (location.origin !== origin || !(el instanceof HTMLInputElement)
+            || el.type !== 'password') return false;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        setter.call(el, value);
+        el.dispatchEvent(new Event('input', {bubbles:true}));
+        el.dispatchEvent(new Event('change', {bubbles:true}));
+        return true;
+    }""", [origin, password])
+    if not ok:
+        raise ValueError("Parola alanı veya site adresi değişti.")
+
+
 def play(page, step):
     page.wait_for_url(lambda url: url == step["url"], timeout=5000)
     target = page.locator(step["selector"])
-    if step["action"] == "input":
+    if step["action"] == "password":
+        origin = origin_of(step["url"])
+        password = credential_store().get_password("Clicker Bot " + origin, step["credential"])
+        if password is None:
+            raise ValueError("Bu kayıt için cihazda saklanan parola bulunamadı.")
+        fill_password(target, origin, password)
+    elif step["action"] == "input":
         target.fill(step["value"], timeout=5000)
+    elif step["action"] == "select":
+        target.select_option(value=step["values"], timeout=5000)
     elif step["action"] == "keydown":
         target.press("Enter", timeout=5000)
     elif step["action"] == "click":
@@ -67,7 +108,7 @@ def save_recording(file, data):
         raise
 
 
-def run(file, url_to_record=None, status=print, console=False, *, data=None, on_step=None):
+def run(file, url_to_record=None, status=print, console=False, *, data=None, on_step=None, credentials=None):
     recording = url_to_record is not None
     if recording:
         if file.exists():
@@ -83,10 +124,28 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
         browser = driver.chromium.launch(channel=channel, headless=False)
         page = browser.new_page(viewport=data["viewport"])
         if recording:
+            references = {}
             def capture(source, step):
                 if source["frame"] != page.main_frame:
                     return
                 steps = data["steps"]
+                if step["action"] == "accountFocus":
+                    kind = step.get("kind")
+                    if not credentials or not credentials.get(kind) or kind not in ("username", "password"):
+                        return
+                    if page.url != step["url"] or urlsplit(page.url).scheme != "https" or origin_of(page.url) != origin_of(url_to_record):
+                        return
+                    target = page.locator(step["selector"])
+                    if not target.evaluate("el => el === document.activeElement"):
+                        return
+                    if kind == "password":
+                        fill_password(target, origin_of(page.url), credentials[kind])
+                        reference = references.setdefault(kind, str(uuid.uuid4()))
+                        steps.append(dict(action=kind, url=step["url"], selector=step["selector"], credential=reference))
+                    else:
+                        target.fill(credentials[kind], timeout=3000)
+                        steps.append(dict(action="input", url=step["url"], selector=step["selector"], value=credentials[kind]))
+                    return
                 if step["action"] == "input" and steps and all(
                     steps[-1].get(k) == step[k] for k in ("action", "url", "selector")
                 ):
@@ -101,6 +160,9 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
             status("Kayıt başladı. Bitirmek için kayıt sekmesini kapat.")
             with page.expect_event("close", timeout=0):
                 pass
+            if "password" in references:
+                credential_store().set_password("Clicker Bot " + origin_of(url_to_record),
+                                                references["password"], credentials["password"])
             save_recording(file, data)
             status(f'{len(data["steps"])} adım kaydedildi: {file}')
         else:

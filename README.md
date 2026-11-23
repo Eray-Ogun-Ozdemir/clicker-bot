@@ -36,9 +36,13 @@ To build a standalone executable on Windows, run `build-windows.cmd`. The script
 
 1. Enter the starting URL under **Başlangıç URL’si**. Include `http://` or `https://`.
 2. Click **Kaydı başlat** (Start recording) and choose a new JSON filename.
-3. Interact with the page in the browser window. The recorder captures clicks, text edits in supported fields, and Enter presses in inputs on the main page.
+3. Interact with the page in the browser window. The recorder captures clicks, text edits in supported fields, dropdown selections and Enter presses in inputs on the main page.
 4. Close the recording tab to finish and save. Recorded text values are stored in the JSON file, so review it before sharing.
 5. Click **Kayıt dosyasını oynat** (Replay recording) and select the saved file. Playback opens the recorded URL, waits one to two seconds between actions and closes the browser on completion.
+
+### Account details
+
+Under **Hesap bilgileri** you can optionally enter a username and password before recording. They require an `https://` starting URL. When you focus a username or password field on that site during recording, Clicker Bot fills it for you. The username is saved in the JSON file as a normal input step. The password is never written to the file: it is stored in the macOS Keychain or Windows Credential Manager, and the recording only keeps a reference to it. Playback on another computer therefore cannot fill the password.
 
 Choose **Kaydı incele** to inspect a saved JSON recording before launching a browser. The inspector lists the steps in order with their targets and input values. **Bu kaydı oynat** runs the displayed recording, highlights the current step and shows the error beside the list if a step fails.
 

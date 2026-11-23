@@ -49,7 +49,8 @@ class RecordingInspector(tk.Toplevel):
         self.dirty = False
         self.busy = False
         self.title(f"Kayıt adımları · {path.name}")
-        self.geometry("760x400")
+        self.geometry("880x470")
+        self.minsize(550, 340)
         self.protocol("WM_DELETE_WINDOW", self.withdraw)
         panel = ttk.Frame(self, padding=14)
         panel.pack(fill="both", expand=True)
@@ -61,11 +62,17 @@ class RecordingInspector(tk.Toplevel):
         self.table = ttk.Treeview(grid, columns=columns, show="headings", selectmode="browse")
         for key, label, width in zip(columns, ("#", "İşlem", "Hedef", "Değer"), (40, 90, 320, 150)):
             self.table.heading(key, text=label)
-            self.table.column(key, width=width, stretch=key in ("selector", "value"))
+            self.table.column(key, width=width, minwidth=width, stretch=key in ("selector", "value"))
         scroll = ttk.Scrollbar(grid, command=self.table.yview)
-        scroll.pack(side="right", fill="y")
         self.table.configure(yscrollcommand=scroll.set)
-        self.table.pack(fill="both", expand=True)
+        horizontal = ttk.Scrollbar(grid, orient="horizontal", command=self.table.xview)
+        self.table.configure(xscrollcommand=horizontal.set)
+        grid.columnconfigure(0, weight=1)
+        grid.rowconfigure(0, weight=1)
+        self.table.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
+        self.table.bind("<Double-1>", lambda event: self.edit_step() if self.table.identify_row(event.y) else None)
         self.table.bind("<<TreeviewSelect>>", lambda event: self.update_controls())
 
         self.detail = tk.StringVar(master=self)
@@ -78,10 +85,12 @@ class RecordingInspector(tk.Toplevel):
         self.delete_button = ttk.Button(controls, text="Sil", command=self.delete_step)
         for button in (self.edit_button, self.up_button, self.down_button, self.delete_button):
             button.pack(side="left", padx=(0, 4))
-        self.play_button = ttk.Button(controls, text="Bu kaydı oynat",
+        file_actions = ttk.Frame(panel)
+        file_actions.pack(fill="x", pady=(8, 0))
+        self.play_button = ttk.Button(file_actions, text="Bu kaydı oynat",
                                       command=lambda: replay(self.path, self.data))
         self.play_button.pack(side="right")
-        self.save_button = ttk.Button(controls, text="Kopyasını kaydet", command=self.save_copy)
+        self.save_button = ttk.Button(file_actions, text="Kopyasını kaydet", command=self.save_copy)
         self.save_button.pack(side="right", padx=(0, 4))
         self.refresh_steps()
 
@@ -119,6 +128,10 @@ class RecordingInspector(tk.Toplevel):
         self.table.delete(*self.table.get_children())
         for index, step in enumerate(self.steps, 1):
             value = "Enter" if step["action"] == "keydown" else step.get("value", "")
+            if step["action"] == "password":
+                value = "Cihazda saklanan parola"
+            elif step["action"] == "select":
+                value = ", ".join(step["values"])
             self.table.insert("", "end", iid=str(index),
                               values=(index, step["action"], step["selector"], value))
         if selected is not None:
