@@ -5,3 +5,8 @@ __pycache__/
 build/
 dist/
 .env
+
+# Recordings keep typed values and user names in plain text, and failure
+# screenshots can show personal data; keep both out of this public repository.
+*.json
+*-hata-*.png
