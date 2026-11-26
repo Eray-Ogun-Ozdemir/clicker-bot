@@ -48,7 +48,17 @@ Choose **Kaydı incele** to inspect a saved JSON recording before launching a br
 
 In the inspector, select a step and use **Düzenle** (Edit) to change its selector or input value. Use **Yukarı** (Up), **Aşağı** (Down), or **Sil** (Delete) to adjust the sequence. **Bu kaydı oynat** runs the edited steps, and **Kopyasını kaydet** saves a new JSON file.
 
-Each step waits for its page and target before it fails. Set this limit for the whole recording in seconds under **Adım zaman aşımı (sn)** in the inspector header. The default is 5 seconds and the maximum is 300. To wait for something slow, such as a result that loads after a search, select the step before it and click **Bekleme ekle** (Add wait). Enter the element to wait for and the longest time to wait. The target starts as the following step's target, and the time starts at 10 seconds or the recording's limit, whichever is longer. During playback, the wait step continues as soon as a matching element becomes visible. If no matching element appears in time, the inspector shows the failed step and the selector it was waiting for. Both settings are saved with **Kopyasını kaydet**.
+Each step waits for its page and target before it fails. Set this limit for the whole recording in seconds under **Adım zaman aşımı (sn)**, below the recording name in the inspector. The default is 5 seconds and the maximum is 300.
+
+To insert a step after the selected step, or at the end when no step is selected, click **Adım ekle** (Add step) and choose one of these:
+
+- **Bekleme** (Wait): waits until an element is visible, for something slow such as a result that loads after a search. The target starts as the following step's target. The time starts at 10 seconds or the recording's limit, whichever is longer.
+- **Metin doğrulaması** (Text check): checks that the target's text contains the expected text. Spacing and line breaks are ignored, and the check is case-sensitive. The target starts as `body`, which checks the whole page.
+- **Adres doğrulaması** (Address check): checks that the page address starts with the expected address, so query strings may differ. The address starts as the following step's address.
+
+During playback, checks look again until they pass or the step's time limit runs out. When a check fails, the inspector shows the failed step with the expected and actual results.
+
+Select **Hata olunca ekran görüntüsü kaydet** (Save a screenshot on failure) to capture the page when any step fails. The screenshot is saved as a PNG file next to the recording, named `<recording>-hata-<date-time>.png`, and **Ekran görüntüsünü aç** opens it. The setting is off by default because screenshots can show personal data. The time limit, added steps and screenshot setting are saved with **Kopyasını kaydet**.
 
 You can also use the command line from the activated environment:
 

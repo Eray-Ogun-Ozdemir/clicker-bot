@@ -15,6 +15,15 @@ CLICK_COORDINATES = ("x", "y", "scrollX", "scrollY")
 OVERLAY = Path(__file__).with_name("overlay.js")
 DEFAULT_TIMEOUT = 5  # seconds each step may wait for its page and target
 MAX_TIMEOUT = 300
+ACTION_LABELS = {"click": "Tıklama", "input": "Yazı", "select": "Liste seçimi", "keydown": "Enter",
+                 "password": "Parola", "wait": "Bekleme", "assert": "Doğrulama"}
+
+
+def step_label(step):
+    """The Turkish name of a step, as the app, the log and the in-browser bar show it."""
+    if step["action"] == "assert":
+        return "Adres doğrulaması" if step.get("kind") == "url" else "Metin doğrulaması"
+    return ACTION_LABELS.get(step["action"], step["action"])
 
 
 class Control:
@@ -143,6 +152,43 @@ def fill_password(target, origin, password):
         raise ValueError("Parola alanı veya site adresi değişti.")
 
 
+class StepFailure(ValueError):
+    """A step that ran but did not find what it expected on the page."""
+
+    def __init__(self, message, expected, actual):
+        super().__init__(f"{message}\nBeklenen: {expected}\nGerçekte: {actual}")
+        self.expected, self.actual = expected, actual
+
+
+def normalize(text):
+    return " ".join(text.split())
+
+
+def shorten(text, limit=160):
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
+def check(page, step):
+    """Whether an assert step holds right now, and what the page shows instead when it does not."""
+    if step["kind"] == "url":
+        return page.url.startswith(step["expected"]), page.url
+    expected = normalize(step["expected"])
+    texts = [normalize(text) for text in page.locator(step["selector"]).all_inner_texts()]
+    if any(expected in text for text in texts):
+        return True, None
+    return False, f'"{shorten(texts[0])}"' if texts else "Hedefle eşleşen öğe yok"
+
+
+def failure_screenshot(page, file):
+    """Save what the page shows next to the recording; None when the page cannot be captured."""
+    path = file.with_name(f"{file.stem}-hata-{time.strftime('%Y%m%d-%H%M%S')}.png")
+    try:
+        page.screenshot(path=str(path))
+    except PlaywrightError:
+        return None
+    return path
+
+
 def valid_timeout(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value <= MAX_TIMEOUT
 
@@ -156,7 +202,10 @@ def format_seconds(value):
     return f"{value:g}"
 
 
-def play(page, step, timeout=DEFAULT_TIMEOUT):
+def play(page, step, timeout=DEFAULT_TIMEOUT, stopped=lambda: False):
+    if step["action"] == "assert":
+        verify(page, step, timeout, stopped)
+        return
     try:
         perform(page, step, timeout * 1000)
     except PlaywrightTimeout:
@@ -164,6 +213,30 @@ def play(page, step, timeout=DEFAULT_TIMEOUT):
         if step["action"] != "wait" and page.url != step["url"]:
             raise ValueError(f"Sayfa {seconds} sn içinde beklenen adrese geçmedi: {step['url']}") from None
         raise ValueError(f"Hedef {seconds} sn içinde hazır olmadı: {step['selector']}") from None
+
+
+def verify(page, step, timeout, stopped):
+    # Pages keep loading after the previous step, so give the check until the timeout to hold.
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            passed, actual = check(page, step)
+        except PlaywrightError:  # the page is navigating; look again
+            passed, actual = False, "Sayfa yükleniyordu"
+        if passed:
+            return
+        if stopped() or time.monotonic() >= deadline:
+            break
+        try:
+            page.wait_for_timeout(200)
+        except PlaywrightError:
+            break
+    seconds = format_seconds(timeout)
+    if step["kind"] == "url":
+        raise StepFailure(f"Sayfa adresi {seconds} sn içinde beklenen adrese ulaşmadı.",
+                          f"{step['expected']} ile başlayan adres", actual)
+    raise StepFailure(f"Beklenen metin {seconds} sn içinde görünmedi.",
+                      f"{step['selector']} içinde \"{step['expected']}\"", actual)
 
 
 def perform(page, step, timeout):
@@ -222,6 +295,10 @@ def load_recording(file):
             raise ValueError(f"{index}. adım geçersiz.")
         if "timeout" in step and not (step["action"] == "wait" and valid_timeout(step["timeout"])):
             raise ValueError(f"{index}. adımın bekleme süresi geçersiz.")
+        if step["action"] == "assert" and not (
+                step.get("kind") in ("text", "url") and isinstance(step.get("expected"), str)
+                and step["expected"] and (step["kind"] == "url" or step["selector"])):
+            raise ValueError(f"{index}. adımdaki doğrulama eksik.")
     if "timeout" in data and not valid_timeout(data["timeout"]):
         raise ValueError(f"Zaman aşımı 0 ile {MAX_TIMEOUT} sn arasında olmalı.")
     return data
@@ -326,16 +403,18 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
                     break
                 if on_step:
                     on_step(index)
-                state["text"] = f"{index}/{total}. adım · {step['action']}"
+                state["text"] = f"{index}/{total}. adım · {step_label(step)}"
                 overlay(page, "progress", state["text"])
-                status(f'{index}. adım: {step["action"]}')
+                status(f"{index}. adım: {step_label(step)}")
                 # Hide the bar so it never covers the element being clicked.
                 overlay(page, "visible", False)
                 try:
-                    play(page, step, step_timeout(data, step))
-                except Exception:
+                    play(page, step, step_timeout(data, step), lambda: control.stopped)
+                except Exception as exc:
                     if control.stopped:  # the page was closed or stop was pressed mid-step
                         break
+                    if data.get("failureScreenshot") and file is not None:
+                        exc.screenshot = failure_screenshot(page, file)
                     raise
                 overlay(page, "visible", True)
             if on_step:

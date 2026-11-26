@@ -251,7 +251,7 @@ def main():
                 run(Path(path), address, report, data=data, credentials=credentials, control=control,
                     on_step=lambda index: events.put(("step", index)))
             except Exception as exc:
-                events.put(("error", str(exc)))
+                events.put(("error", (str(exc), getattr(exc, "screenshot", None))))
             finally:
                 events.put(("done", None))
         threading.Thread(target=worker, daemon=True).start()
@@ -278,14 +278,18 @@ def main():
                 if value is not None:
                     inspector.highlight(value)
             elif kind == "error":
+                message, screenshot = value
                 if active_step is not None:
                     inspector.highlight(active_step)
-                    inspector.detail.set(f"{active_step}. adımda hata · {value}")
+                    inspector.show_message(f"{active_step}. adımda hata · {message}", error=True)
+                    inspector.show_screenshot(screenshot)
                     inspector.deiconify()
+                if screenshot:
+                    message += f"\n\nEkran görüntüsü kaydedildi: {screenshot.name}"
                 mascot.move("fail")
                 status.set("Hata")
-                log(value)
-                messagebox.showerror("Clicker Bot", value)
+                log(message)
+                messagebox.showerror("Clicker Bot", message)
             else:
                 log(value)
         root.after(100, update)
