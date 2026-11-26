@@ -48,6 +48,8 @@ Choose **Kaydı incele** to inspect a saved JSON recording before launching a br
 
 In the inspector, select a step and use **Düzenle** (Edit) to change its selector or input value. Use **Yukarı** (Up), **Aşağı** (Down), or **Sil** (Delete) to adjust the sequence. **Bu kaydı oynat** runs the edited steps, and **Kopyasını kaydet** saves a new JSON file.
 
+Each step waits for its page and target before it fails. Set this limit for the whole recording in seconds under **Adım zaman aşımı (sn)** in the inspector header. The default is 5 seconds and the maximum is 300. To wait for something slow, such as a result that loads after a search, select the step before it and click **Bekleme ekle** (Add wait). Enter the element to wait for and the longest time to wait. The target starts as the following step's target, and the time starts at 10 seconds or the recording's limit, whichever is longer. During playback, the wait step continues as soon as a matching element becomes visible. If no matching element appears in time, the inspector shows the failed step and the selector it was waiting for. Both settings are saved with **Kopyasını kaydet**.
+
 You can also use the command line from the activated environment:
 
 ```sh

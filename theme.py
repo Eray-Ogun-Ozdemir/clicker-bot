@@ -168,7 +168,7 @@ def system_prefers_dark(root=None):
 
 FAMILY = "Helvetica"
 ACTION_LABELS = {"click": "Tıklama", "input": "Yazı", "select": "Liste seçimi",
-                 "keydown": "Enter", "password": "Parola"}
+                 "keydown": "Enter", "password": "Parola", "wait": "Bekleme"}
 
 
 def font(size, bold=False):
