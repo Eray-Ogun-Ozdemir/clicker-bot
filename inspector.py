@@ -13,35 +13,35 @@ class StepDialog(simpledialog.Dialog):
         super().__init__(parent, title="Adımı düzenle")
 
     def body(self, master):
-        self.configure(bg=theme.WHITE)
-        master.configure(bg=theme.WHITE, padx=10, pady=6)
+        self.configure(bg=theme.BG)
+        master.configure(bg=theme.BG, padx=10, pady=6)
         master.pack_configure(fill="both", expand=True)
         tk.Label(master, text=f"{theme.ACTION_LABELS.get(self.step['action'], self.step['action'])} adımı",
-                 bg=theme.WHITE, fg=theme.INK, font=theme.font(17, True)).pack(anchor="w")
+                 bg=theme.BG, fg=theme.INK, font=theme.font(17, True)).pack(anchor="w")
         theme.divider(master, pady=(10, 14))
-        tk.Label(master, text="Hedef (selector)", bg=theme.WHITE, fg=theme.INK,
+        tk.Label(master, text="Hedef (selector)", bg=theme.BG, fg=theme.INK,
                  font=theme.font(12, True)).pack(anchor="w", pady=(0, 6))
         holder, self.selector = theme.entry(master, self.step["selector"], width=58)
         self.selector.configure(font=theme.mono(12))
         holder.pack(fill="x")
         self.value = None
         if self.step["action"] == "input":
-            tk.Label(master, text="Girilecek değer", bg=theme.WHITE, fg=theme.INK,
+            tk.Label(master, text="Girilecek değer", bg=theme.BG, fg=theme.INK,
                      font=theme.font(12, True)).pack(anchor="w", pady=(14, 6))
             outer, inner = theme.bordered(master)
             outer.pack(fill="x")
-            self.value = tk.Text(inner, width=56, height=4, relief="flat", bg=theme.WHITE, fg=theme.INK,
+            self.value = tk.Text(inner, width=56, height=4, relief="flat", bg=theme.BG, fg=theme.INK,
                                  insertbackground=theme.INK, highlightthickness=0, font=theme.font(13),
                                  padx=10, pady=8, wrap="word")
             self.value.insert("1.0", self.step.get("value", ""))
             self.value.pack(fill="x")
             self.value.bind("<FocusIn>", lambda _: outer.configure(bg=theme.RED))
             self.value.bind("<FocusOut>", lambda _: outer.configure(bg=theme.FIELD_BORDER))
-        self.error = tk.Label(master, bg=theme.WHITE, fg=theme.RED, font=theme.font(12), anchor="w")
+        self.error = tk.Label(master, bg=theme.BG, fg=theme.RED, font=theme.font(12), anchor="w")
         return self.selector
 
     def buttonbox(self):
-        box = tk.Frame(self, bg=theme.WHITE, padx=20, pady=16)
+        box = tk.Frame(self, bg=theme.BG, padx=20, pady=16)
         box.pack(fill="x")
         save, _ = theme.button(box, "Kaydet", self.ok, "Primary", "Medium.")
         save.pack(side="right")
@@ -78,25 +78,25 @@ class PasswordDialog(simpledialog.Dialog):
         super().__init__(parent, title="Parolayı gir")
 
     def body(self, master):
-        self.configure(bg=theme.WHITE)
-        master.configure(bg=theme.WHITE, padx=10, pady=6)
+        self.configure(bg=theme.BG)
+        master.configure(bg=theme.BG, padx=10, pady=6)
         master.pack_configure(fill="both", expand=True)
-        tk.Label(master, text="Parolayı gir", bg=theme.WHITE, fg=theme.INK,
+        tk.Label(master, text="Parolayı gir", bg=theme.BG, fg=theme.INK,
                  font=theme.font(17, True)).pack(anchor="w")
         theme.divider(master, pady=(10, 12))
         tk.Label(master, text=f"Bu kayıt {self.origin} adresinde parola kullanıyor. Parola yalnızca bu cihazda "
                               "saklanır, kayıt dosyasına yazılmaz.",
-                 bg=theme.WHITE, fg=theme.MUTED, font=theme.font(12), justify="left", wraplength=420).pack(anchor="w")
-        tk.Label(master, text="Parola", bg=theme.WHITE, fg=theme.INK,
+                 bg=theme.BG, fg=theme.MUTED, font=theme.font(12), justify="left", wraplength=420).pack(anchor="w")
+        tk.Label(master, text="Parola", bg=theme.BG, fg=theme.INK,
                  font=theme.font(12, True)).pack(anchor="w", pady=(14, 6))
         holder, self.password = theme.entry(master, show="•", width=40)
         holder.pack(fill="x")
-        self.error = tk.Label(master, bg=theme.WHITE, fg=theme.RED, font=theme.font(12), anchor="w")
+        self.error = tk.Label(master, bg=theme.BG, fg=theme.RED, font=theme.font(12), anchor="w")
         self.password.bind("<Key>", lambda _: self.error.pack_forget(), add="+")
         return self.password
 
     def buttonbox(self):
-        box = tk.Frame(self, bg=theme.WHITE, padx=20, pady=16)
+        box = tk.Frame(self, bg=theme.BG, padx=20, pady=16)
         box.pack(fill="x")
         save, _ = theme.button(box, "Kaydet", self.ok, "Primary", "Medium.")
         save.pack(side="right")
@@ -127,18 +127,18 @@ class RecordingInspector(tk.Toplevel):
         self.title(f"Kayıt adımları · {path.name}")
         self.geometry("880x500")
         self.minsize(620, 380)
-        self.configure(bg=theme.WHITE)
+        self.configure(bg=theme.BG)
         self.protocol("WM_DELETE_WINDOW", self.withdraw)
-        panel = tk.Frame(self, bg=theme.WHITE, padx=24, pady=18)
+        panel = tk.Frame(self, bg=theme.BG, padx=24, pady=18)
         panel.pack(fill="both", expand=True)
 
-        header = tk.Frame(panel, bg=theme.WHITE)
+        header = tk.Frame(panel, bg=theme.BG)
         header.pack(fill="x")
-        tk.Label(header, text="KAYIT ADIMLARI", bg=theme.WHITE, fg=theme.MUTED,
+        tk.Label(header, text="KAYIT ADIMLARI", bg=theme.BG, fg=theme.MUTED,
                  font=theme.font(10, True)).pack(anchor="w")
-        title_row = tk.Frame(header, bg=theme.WHITE)
+        title_row = tk.Frame(header, bg=theme.BG)
         title_row.pack(fill="x", pady=(6, 0))
-        self.name_label = tk.Label(title_row, bg=theme.WHITE, fg=theme.INK, font=theme.font(20, True))
+        self.name_label = tk.Label(title_row, bg=theme.BG, fg=theme.INK, font=theme.font(20, True))
         self.name_label.pack(side="left")
         self.count_badge = theme.badge(title_row)
         self.count_badge.pack(side="left", padx=(12, 0))
@@ -170,11 +170,11 @@ class RecordingInspector(tk.Toplevel):
 
         self.detail = tk.StringVar(master=self)  # playback errors and notices; app.py writes to it
         self.detail.trace_add("write", lambda *_: self.render_detail())
-        self.detail_label = tk.Label(panel, bg=theme.WHITE, anchor="w", justify="left", wraplength=800)
+        self.detail_label = tk.Label(panel, bg=theme.BG, anchor="w", justify="left", wraplength=800)
         self.detail_label.pack(fill="x", pady=(10, 0))
         self.detail_label.bind("<Configure>", lambda e: self.detail_label.configure(wraplength=max(200, e.width)))
 
-        controls = tk.Frame(panel, bg=theme.WHITE)
+        controls = tk.Frame(panel, bg=theme.BG)
         controls.pack(fill="x", pady=(12, 0))
         self.step_buttons = {}
         for key, text, command in (("edit", "Düzenle", self.edit_step), ("up", "Yukarı", lambda: self.move_step(-1)),
@@ -186,7 +186,7 @@ class RecordingInspector(tk.Toplevel):
         self.down_button, self.delete_button = self.step_buttons["down"], self.step_buttons["delete"]
 
         theme.divider(panel, pady=(16, 14))
-        file_actions = tk.Frame(panel, bg=theme.WHITE)
+        file_actions = tk.Frame(panel, bg=theme.BG)
         file_actions.pack(fill="x")
         holder, self.play_button = theme.button(file_actions, "Bu kaydı oynat",
                                                 lambda: replay(self.path, self.data), "Primary", "Medium.")

@@ -15,13 +15,14 @@ class Mascot:
     """The llama in the main window. Poses switch directly, without transition animations."""
 
     def __init__(self, parent):
-        self.label = tk.Label(parent, bg=theme.WHITE, borderwidth=0)
+        self.label = tk.Label(parent, bg=theme.BG, borderwidth=0)
         self.label.pack(side="right")
         self.poses = {p.stem: tk.PhotoImage(file=str(p)) for p in ASSETS.glob("*.png")}
         self.timer = None
         self.sleep_timer = None
         self.state = "idle"
         self.show()
+        theme.on_palette_change(self.paint)
         window = self.label.winfo_toplevel()
         for event in ("<Motion>", "<ButtonPress>", "<KeyPress>", "<FocusIn>", "<MouseWheel>"):
             window.bind(event, self.activity, add="+")
@@ -40,8 +41,13 @@ class Mascot:
         if self.state in IDLE and self.state != "sleep":
             self.sleep_timer = self.label.after(SLEEP_AFTER_MS, lambda: self.move("sleep"))
 
+    def paint(self):
+        """Show the current pose, using its *_dark variant on the dark palette when there is one."""
+        dark = f"{self.state}_dark"
+        self.label.configure(image=self.poses[dark if theme.DARK_MODE and dark in self.poses else self.state])
+
     def show(self):
-        self.label.configure(image=self.poses[self.state])
+        self.paint()
         if self.state in NEXT:
             next_pose, delay_ms = NEXT[self.state]
             self.timer = self.label.after(delay_ms, lambda: self.move(next_pose))
