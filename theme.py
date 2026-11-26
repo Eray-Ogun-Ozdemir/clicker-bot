@@ -167,8 +167,6 @@ def system_prefers_dark(root=None):
 
 
 FAMILY = "Helvetica"
-ACTION_LABELS = {"click": "Tıklama", "input": "Yazı", "select": "Liste seçimi",
-                 "keydown": "Enter", "password": "Parola", "wait": "Bekleme"}
 
 
 def font(size, bold=False):
@@ -258,6 +256,11 @@ def _style(root):
     style.configure("TLabel", background=BG, foreground=INK)
     style.configure("Muted.TLabel", background=BG, foreground=MUTED)
     style.configure("TRadiobutton", background=BG, foreground=INK)
+    style.configure("TCheckbutton", background=BG, foreground=MUTED, font=font(12), focuscolor=BG,
+                    indicatorbackground=BG, indicatorforeground=ON_PRIMARY,
+                    upperbordercolor=FIELD_BORDER, lowerbordercolor=FIELD_BORDER)
+    style.map("TCheckbutton", background=[("active", BG)], foreground=[("disabled", HINT)],
+              indicatorbackground=[("selected", RED), ("disabled", MUTED_SURFACE)])
     # clam draws entry borders from bordercolor plus light/dark bevel colours; tie all three to the palette.
     style.configure("TEntry", fieldbackground=BG, foreground=INK, insertcolor=INK, padding=9,
                     bordercolor=FIELD_BORDER, lightcolor=BG, darkcolor=BG)
