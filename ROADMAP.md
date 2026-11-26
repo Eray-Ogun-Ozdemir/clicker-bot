@@ -11,7 +11,7 @@ These are proposed improvements, ordered by the value they bring to recording, e
 | 5 | Assertions and failure details | Check expected text or a destination URL. Show expected and actual results alongside the failed step, with an optional local screenshot. | Done |
 | 6 | Recording collections | Group saved workflows by project in the sidebar and reopen a recording by name. | Planned |
 | 7 | Test data variables | Supply different input values at playback time so one recording can cover multiple test cases. | Planned |
-| 8 | Additional browser interactions | Extend recording and playback to dropdown selections, checkboxes and new tabs, with a round-trip test for each interaction. | Dropdowns done; checkboxes and new tabs open |
+| 8 | Additional browser interactions | Extend recording and playback to dropdown selections, checkboxes and new tabs, with a round-trip test for each interaction. | Dropdowns, holds and drag and drop are recorded; scroll, hover, double-click, right-click and key presses can be added in the inspector; checkboxes and new tabs open |
 
 ## Suggested first milestone
 

@@ -2,6 +2,7 @@ import argparse
 import sys
 import json
 import random
+import re
 import threading
 import time
 import uuid
@@ -15,8 +16,14 @@ CLICK_COORDINATES = ("x", "y", "scrollX", "scrollY")
 OVERLAY = Path(__file__).with_name("overlay.js")
 DEFAULT_TIMEOUT = 5  # seconds each step may wait for its page and target
 MAX_TIMEOUT = 300
+MAX_HOLD = 30  # seconds a hold step may keep the mouse button down
+KEEP_SCREENSHOTS = 5  # failure screenshots kept per recording
 ACTION_LABELS = {"click": "Tıklama", "input": "Yazı", "select": "Liste seçimi", "keydown": "Enter",
-                 "password": "Parola", "wait": "Bekleme", "assert": "Doğrulama"}
+                 "password": "Parola", "wait": "Bekleme", "sleep": "Sabit bekleme", "assert": "Doğrulama", "scroll": "Kaydırma",
+                 "hover": "Üzerine gelme", "hold": "Basılı tutma", "dblclick": "Çift tıklama",
+                 "rightclick": "Sağ tıklama", "press": "Tuşa basma", "drag": "Sürükle-bırak"}
+# Steps that may leave the selector empty to act on the page as a whole.
+PAGE_ACTIONS = ("scroll", "press")
 
 
 def step_label(step):
@@ -186,7 +193,16 @@ def failure_screenshot(page, file):
         page.screenshot(path=str(path))
     except PlaywrightError:
         return None
+    prune_screenshots(file)
     return path
+
+
+def prune_screenshots(file, keep=KEEP_SCREENSHOTS):
+    """Delete all but the newest failure screenshots of a recording."""
+    pattern = re.compile(re.escape(file.stem) + r"-hata-\d{8}-\d{6}\.png")
+    shots = sorted(p for p in file.parent.iterdir() if pattern.fullmatch(p.name))  # names sort by time
+    for old in shots[:-keep]:
+        old.unlink(missing_ok=True)
 
 
 def valid_timeout(value):
@@ -203,6 +219,12 @@ def format_seconds(value):
 
 
 def play(page, step, timeout=DEFAULT_TIMEOUT, stopped=lambda: False):
+    if step["action"] == "sleep":
+        # Wait in short slices so Durdur ends it at once.
+        end = time.monotonic() + step["seconds"]
+        while not stopped() and (left := end - time.monotonic()) > 0:
+            page.wait_for_timeout(min(200, left * 1000))
+        return
     if step["action"] == "assert":
         verify(page, step, timeout, stopped)
         return
@@ -212,7 +234,14 @@ def play(page, step, timeout=DEFAULT_TIMEOUT, stopped=lambda: False):
         seconds = format_seconds(timeout)
         if step["action"] != "wait" and page.url != step["url"]:
             raise ValueError(f"Sayfa {seconds} sn içinde beklenen adrese geçmedi: {step['url']}") from None
+        if step["action"] == "drag":
+            raise ValueError(f"Sürüklenecek hedef veya bırakılacak yer {seconds} sn içinde hazır olmadı: "
+                             f"{step['selector']} → {step['to']}") from None
         raise ValueError(f"Hedef {seconds} sn içinde hazır olmadı: {step['selector']}") from None
+    except PlaywrightError as exc:
+        if step["action"] == "press" and "Unknown key" in str(exc):
+            raise ValueError(f"Bilinmeyen tuş: {step['key']}") from None
+        raise
 
 
 def verify(page, step, timeout, stopped):
@@ -259,6 +288,35 @@ def perform(page, step, timeout):
         target.select_option(value=step["values"], timeout=timeout)
     elif step["action"] == "keydown":
         target.press("Enter", timeout=timeout)
+    elif step["action"] == "scroll":
+        if step["selector"]:
+            target.scroll_into_view_if_needed(timeout=timeout)
+        else:
+            page.mouse.wheel(0, step["amount"])
+    elif step["action"] == "hover":
+        target.hover(timeout=timeout)
+    elif step["action"] == "dblclick":
+        target.dblclick(timeout=timeout)
+    elif step["action"] == "rightclick":
+        target.click(button="right", timeout=timeout)
+    elif step["action"] == "press":
+        if step["selector"]:
+            target.press(step["key"], timeout=timeout)
+        else:
+            page.keyboard.press(step["key"])
+    elif step["action"] == "drag":
+        target.drag_to(page.locator(step["to"]), timeout=timeout)
+    elif step["action"] == "hold":
+        target.scroll_into_view_if_needed(timeout=timeout)
+        box = target.bounding_box(timeout=timeout)
+        if box is None:
+            raise ValueError(f"Basılı tutulacak hedef görünmüyor: {step['selector']}")
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        try:
+            page.wait_for_timeout(step["duration"] * 1000)
+        finally:
+            page.mouse.up()
     elif step["action"] == "click":
         if target.count() == 1 or not all(key in step for key in CLICK_COORDINATES):
             target.click(position=step.get("position"), timeout=timeout)
@@ -285,6 +343,26 @@ def main():
         parser.error(str(exc))
 
 
+def valid_step_fields(step):
+    """Check the fields the newer interaction steps need; older step types pass through."""
+    action, selector = step["action"], step["selector"]
+    if action in ("hover", "hold", "dblclick", "rightclick", "drag") and not selector:
+        return False
+    if action == "scroll":
+        amount = step.get("amount")
+        return bool(selector) or (isinstance(amount, int) and not isinstance(amount, bool) and amount != 0)
+    if action == "press":
+        return isinstance(step.get("key"), str) and bool(step["key"].strip())
+    if action == "drag":
+        return isinstance(step.get("to"), str) and bool(step["to"].strip())
+    if action == "sleep":
+        return valid_timeout(step.get("seconds"))
+    if action == "hold":
+        duration = step.get("duration")
+        return isinstance(duration, (int, float)) and not isinstance(duration, bool) and 0 < duration <= MAX_HOLD
+    return True
+
+
 def load_recording(file):
     data = json.loads(file.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or not isinstance(data.get("steps"), list):
@@ -295,6 +373,8 @@ def load_recording(file):
             raise ValueError(f"{index}. adım geçersiz.")
         if "timeout" in step and not (step["action"] == "wait" and valid_timeout(step["timeout"])):
             raise ValueError(f"{index}. adımın bekleme süresi geçersiz.")
+        if not valid_step_fields(step):
+            raise ValueError(f"{index}. adımın ({step_label(step)}) bilgileri eksik veya geçersiz.")
         if step["action"] == "assert" and not (
                 step.get("kind") in ("text", "url") and isinstance(step.get("expected"), str)
                 and step["expected"] and (step["kind"] == "url" or step["selector"])):
