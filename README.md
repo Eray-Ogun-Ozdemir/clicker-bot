@@ -36,7 +36,7 @@ To build a standalone executable on Windows, run `build-windows.cmd`. The script
 
 1. Enter the starting URL under **Başlangıç URL’si**. Include `http://` or `https://`.
 2. Click **Kaydı başlat** (Start recording) and choose a new JSON filename.
-3. Interact with the page in the browser window. The recorder captures clicks, text edits in supported fields, dropdown selections and Enter presses in inputs on the main page.
+3. Interact with the page in the browser window. The recorder captures clicks, text edits in supported fields, dropdown selections and Enter presses in inputs on the main page. Pressing and holding the mouse button on an element for at least 0.6 seconds without moving records a **Basılı tutma** (Hold) step with that duration instead of a click. Dragging an element onto another one records a **Sürükle-bırak** (Drag and drop) step. This works for the browser's built-in drag and drop, for pages that move elements with the mouse, such as jQuery UI, and for lists that reorder while you drag, such as SortableJS. Selecting text by dragging is not recorded as a drag.
 4. A red frame and a control bar appear in the browser. Click **Bitir** (Finish) to save, or **İptal** (Cancel) to close without creating a file. Closing the tab or clicking **Kaydı bitir** in the app also saves. Recorded text values are stored in the JSON file, so review it before sharing.
 5. Click **Kayıt dosyasını oynat** (Replay recording) and select the saved file. Playback opens the recorded URL, waits one to two seconds between actions and closes the browser on completion. The bar in the browser shows the current step; **Durdur** (Stop) there, **Oynatmayı durdur** in the app, or closing the tab stops playback after the current step.
 
@@ -52,13 +52,23 @@ Each step waits for its page and target before it fails. Set this limit for the 
 
 To insert a step after the selected step, or at the end when no step is selected, click **Adım ekle** (Add step) and choose one of these:
 
+- **Kaydırma** (Scroll): with a target, scrolls until that element is visible. With no target, scrolls the page by a number of pixels: positive scrolls down and negative scrolls up.
+- **Üzerine gelme** (Hover): moves the mouse over the target, for example to open a menu.
+- **Basılı tutma** (Hold): holds the mouse button down on the target for up to 30 seconds.
+- **Çift tıklama** (Double-click) and **Sağ tıklama** (Right-click): click the target twice, or with the right button.
+- **Tuşa basma** (Key press): presses a key or shortcut such as `Tab`, `Escape`, `ArrowDown` or `Control+A`. With a target the key goes to that element; with no target it goes to the page.
+- **Sürükle-bırak** (Drag and drop): drags the target onto a second element. If a page sets up dragging only after it loads, add a **Bekleme** step before a drag that comes first in a recording.
+
+Below a separator, the same menu offers waits and checks:
+
 - **Bekleme** (Wait): waits until an element is visible, for something slow such as a result that loads after a search. The target starts as the following step's target. The time starts at 10 seconds or the recording's limit, whichever is longer.
+- **Sabit bekleme** (Fixed wait): pauses playback for a set number of seconds, up to 300, without looking at the page. **Durdur** ends it at once.
 - **Metin doğrulaması** (Text check): checks that the target's text contains the expected text. Spacing and line breaks are ignored, and the check is case-sensitive. The target starts as `body`, which checks the whole page.
 - **Adres doğrulaması** (Address check): checks that the page address starts with the expected address, so query strings may differ. The address starts as the following step's address.
 
 During playback, checks look again until they pass or the step's time limit runs out. When a check fails, the inspector shows the failed step with the expected and actual results.
 
-Select **Hata olunca ekran görüntüsü kaydet** (Save a screenshot on failure) to capture the page when any step fails. The screenshot is saved as a PNG file next to the recording, named `<recording>-hata-<date-time>.png`, and **Ekran görüntüsünü aç** opens it. The setting is off by default because screenshots can show personal data. The time limit, added steps and screenshot setting are saved with **Kopyasını kaydet**.
+Select **Hata olunca ekran görüntüsü kaydet** (Save a screenshot on failure) to capture the page when any step fails. The screenshot is saved as a PNG file next to the recording, named `<recording>-hata-<date-time>.png`, and **Ekran görüntüsünü aç** opens it. Only the five newest screenshots of each recording are kept; older ones are deleted when a new one is saved. The setting is off by default because screenshots can show personal data. The time limit, added steps and screenshot setting are saved with **Kopyasını kaydet**.
 
 You can also use the command line from the activated environment:
 

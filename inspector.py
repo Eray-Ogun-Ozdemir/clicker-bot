@@ -6,19 +6,34 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import theme
-from recorder import (ACTION_LABELS, CLICK_COORDINATES, DEFAULT_TIMEOUT, MAX_TIMEOUT, delete_credentials,
-                      format_seconds, missing_credentials, origin_of, save_credentials, save_recording,
-                      step_label, stored_credentials, valid_timeout)
+from recorder import (ACTION_LABELS, CLICK_COORDINATES, DEFAULT_TIMEOUT, MAX_HOLD, MAX_TIMEOUT, PAGE_ACTIONS,
+                      delete_credentials, format_seconds, missing_credentials, origin_of, save_credentials,
+                      save_recording, step_label, stored_credentials, valid_timeout)
 
 
-def parse_seconds(text):
-    """Read a duration typed as "5", "2.5" or "2,5"; None when it is not a usable limit."""
+def parse_seconds(text, limit=MAX_TIMEOUT):
+    """Read a duration typed as "5", "2.5" or "2,5"; None when it is not between 0 and the limit."""
     try:
         value = float(text.strip().replace(",", "."))
     except ValueError:
         return None
     value = int(value) if value.is_integer() else value
-    return value if valid_timeout(value) else None
+    return value if valid_timeout(value) and value <= limit else None
+
+
+def parse_pixels(text):
+    """Read a whole number of pixels such as "600" or "-300"; None when it is not one or is zero."""
+    try:
+        value = int(text.strip())
+    except ValueError:
+        return None
+    return value or None
+
+
+# What "Adım ekle" offers, in menu order: interactions, then waits and checks.
+ADD_INTERACTIONS = ("scroll", "hover", "hold", "dblclick", "rightclick", "press", "drag")
+ADD_CHECKS = ("wait", "sleep", "text", "url")
+ADD_LABELS = {**ACTION_LABELS, "text": "Metin doğrulaması", "url": "Adres doğrulaması"}
 
 
 def step_title(step):
@@ -30,10 +45,23 @@ def field_label(master, text, first=False):
              font=theme.font(12, True)).pack(anchor="w", pady=(0 if first else 14, 6))
 
 
+def hint(master, text):
+    tk.Label(master, text=text, bg=theme.BG, fg=theme.MUTED, font=theme.font(11),
+             justify="left").pack(anchor="w", pady=(6, 0))
+
+
 class StepDialog(simpledialog.Dialog):
     def __init__(self, parent, step, title="Adımı düzenle"):
         self.step = step
         super().__init__(parent, title=title)
+
+    def entry(self, master, label, value, first=False, mono=False, width=58):
+        field_label(master, label, first)
+        holder, widget = theme.entry(master, value, width=width)
+        if mono:
+            widget.configure(font=theme.mono(12))
+        holder.pack(fill="x" if width > 20 else None, anchor="w")
+        return widget
 
     def body(self, master):
         self.configure(bg=theme.BG)
@@ -42,41 +70,58 @@ class StepDialog(simpledialog.Dialog):
         tk.Label(master, text=step_title(self.step), bg=theme.BG, fg=theme.INK,
                  font=theme.font(17, True)).pack(anchor="w")
         theme.divider(master, pady=(10, 14))
+        step, action = self.step, self.step["action"]
         self.selector = self.value = self.timeout = self.expected = None
-        url_check = self.step["action"] == "assert" and self.step["kind"] == "url"
-        if not url_check:  # an address check looks at the page, not at an element
-            field_label(master, "Hedef (selector)", first=True)
-            holder, self.selector = theme.entry(master, self.step["selector"], width=58)
-            self.selector.configure(font=theme.mono(12))
-            holder.pack(fill="x")
-        if self.step["action"] == "assert":
-            field_label(master, "Sayfa adresi şununla başlamalı" if url_check else "Hedefin içermesi gereken metin",
-                        first=url_check)
-            holder, self.expected = theme.entry(master, self.step["expected"], width=58)
-            if url_check:
-                self.expected.configure(font=theme.mono(12))
-            holder.pack(fill="x")
-            tk.Label(master, text="Oynatma, sonuç tutana kadar en fazla adım zaman aşımı kadar bekler.",
-                     bg=theme.BG, fg=theme.MUTED, font=theme.font(11)).pack(anchor="w", pady=(8, 0))
-        if self.step["action"] == "wait":
-            field_label(master, "Hedef görünene kadar en fazla (sn)")
-            holder, self.timeout = theme.entry(master, format_seconds(self.step["timeout"]), width=8)
-            holder.pack(anchor="w")
-        if self.step["action"] == "input":
-            tk.Label(master, text="Girilecek değer", bg=theme.BG, fg=theme.INK,
-                     font=theme.font(12, True)).pack(anchor="w", pady=(14, 6))
+        self.amount = self.duration = self.key = self.to = self.seconds = None
+        url_check = action == "assert" and step["kind"] == "url"
+        if not url_check and action != "sleep":  # these look at the page or the clock, not at an element
+            label = "Hedef (selector) · boş bırakılırsa sayfa" if action in PAGE_ACTIONS else "Hedef (selector)"
+            self.selector = self.entry(master, label, step["selector"], first=True, mono=True)
+        if action == "assert":
+            self.expected = self.entry(
+                master, "Sayfa adresi şununla başlamalı" if url_check else "Hedefin içermesi gereken metin",
+                step["expected"], first=url_check, mono=url_check)
+            hint(master, "Oynatma, sonuç tutana kadar en fazla adım zaman aşımı kadar bekler.")
+        elif action == "wait":
+            self.timeout = self.entry(master, "Hedef görünene kadar en fazla (sn)",
+                                      format_seconds(step["timeout"]), width=8)
+        elif action == "sleep":
+            self.seconds = self.entry(master, f"Beklenecek süre (sn, en fazla {MAX_TIMEOUT})",
+                                      format_seconds(step["seconds"]), first=True, width=8)
+            hint(master, "Oynatma, sayfaya bakmadan bu süre kadar durur. Durdur ile hemen bitirilebilir.")
+        elif action == "scroll":
+            self.amount = self.entry(master, "Hedef boşsa kaydırma miktarı (px)", str(step.get("amount", "")), width=8)
+            hint(master, "Hedef doluysa sayfa o öğe görünene kadar kaydırılır.\n"
+                         "Hedef boşsa sayfa bu kadar kaydırılır: aşağı için artı, yukarı için eksi.")
+        elif action == "hold":
+            self.duration = self.entry(master, f"Basılı tutma süresi (sn, en fazla {MAX_HOLD})",
+                                       format_seconds(step["duration"]), width=8)
+        elif action == "press":
+            self.key = self.entry(master, "Tuş", step["key"], mono=True, width=24)
+            hint(master, "Örnek: Tab, Escape, ArrowDown, Backspace, Control+A, Meta+C.\n"
+                         "Hedef boşsa tuş sayfaya, doluysa o öğeye gönderilir.")
+        elif action == "drag":
+            self.to = self.entry(master, "Bırakılacak yer (selector)", step["to"], mono=True)
+        elif action == "input":
+            field_label(master, "Girilecek değer")
             outer, inner = theme.bordered(master)
             outer.pack(fill="x")
             self.value = tk.Text(inner, width=56, height=4, relief="flat", bg=theme.BG, fg=theme.INK,
                                  insertbackground=theme.INK, highlightthickness=0, font=theme.font(13),
                                  padx=10, pady=8, wrap="word")
-            self.value.insert("1.0", self.step.get("value", ""))
+            self.value.insert("1.0", step.get("value", ""))
             self.value.pack(fill="x")
             self.value.bind("<FocusIn>", lambda _: outer.configure(bg=theme.RED))
             self.value.bind("<FocusOut>", lambda _: outer.configure(bg=theme.FIELD_BORDER))
         self.error = tk.Label(master, bg=theme.BG, fg=theme.RED, font=theme.font(12), anchor="w")
-        # A new text check comes with a target already filled in; what is missing is the text.
-        return self.expected or self.selector
+        # Start where something is still missing: new checks and key presses come with a target filled in.
+        missing = [f for f in (self.expected, self.key, self.to) if f is not None and not f.get()]
+        return missing[0] if missing else self.fields[0]
+
+    @property
+    def fields(self):
+        return [f for f in (self.selector, self.timeout, self.seconds, self.expected, self.amount, self.duration,
+                            self.key, self.to) if f is not None]
 
     def buttonbox(self):
         box = tk.Frame(self, bg=theme.BG, padx=20, pady=16)
@@ -85,18 +130,28 @@ class StepDialog(simpledialog.Dialog):
         save.pack(side="right")
         cancel, _ = theme.button(box, "İptal", self.cancel, "Outline", "Medium.")
         cancel.pack(side="right", padx=(0, 8))
-        for field in (self.selector, self.timeout, self.expected):
-            if field is not None:
-                field.bind("<Return>", self.ok)
+        for field in self.fields:
+            field.bind("<Return>", self.ok)
         self.bind("<Escape>", self.cancel)
 
     def validate(self):
-        if self.selector is not None and not self.selector.get().strip():
+        page_level = self.step["action"] in PAGE_ACTIONS
+        selector = self.selector.get().strip() if self.selector is not None else None
+        if self.selector is not None and not selector and not page_level:
             return self.reject("Hedef boş bırakılamaz.", self.selector)
-        if self.expected is not None and not self.expected.get().strip():
-            return self.reject("Beklenen değer boş bırakılamaz.", self.expected)
-        if self.timeout is not None and parse_seconds(self.timeout.get()) is None:
-            return self.reject(f"Süre 0 ile {MAX_TIMEOUT} sn arasında bir sayı olmalı.", self.timeout)
+        for field, message in ((self.expected, "Beklenen değer boş bırakılamaz."),
+                               (self.key, "Basılacak tuşu yaz."),
+                               (self.to, "Bırakılacak yeri yaz.")):
+            if field is not None and not field.get().strip():
+                return self.reject(message, field)
+        for field in (self.timeout, self.seconds):
+            if field is not None and parse_seconds(field.get()) is None:
+                return self.reject(f"Süre 0 ile {MAX_TIMEOUT} sn arasında bir sayı olmalı.", field)
+        if self.duration is not None and parse_seconds(self.duration.get(), MAX_HOLD) is None:
+            return self.reject(f"Süre 0 ile {MAX_HOLD} sn arasında bir sayı olmalı.", self.duration)
+        if self.amount is not None and not selector and parse_pixels(self.amount.get()) is None:
+            return self.reject("Hedef yoksa sıfırdan farklı bir piksel miktarı yaz (ör. 600 veya -300).",
+                               self.amount)
         return True
 
     def reject(self, message, field):
@@ -114,12 +169,23 @@ class StepDialog(simpledialog.Dialog):
                 for key in (*CLICK_COORDINATES, "position"):
                     self.result.pop(key, None)
             self.result["selector"] = selector
-        if self.expected is not None:
-            self.result["expected"] = self.expected.get().strip()
+        for name, field in (("expected", self.expected), ("key", self.key), ("to", self.to)):
+            if field is not None:
+                self.result[name] = field.get().strip()
         if self.value is not None:
             self.result["value"] = self.value.get("1.0", "end-1c")
         if self.timeout is not None:
             self.result["timeout"] = parse_seconds(self.timeout.get())
+        if self.seconds is not None:
+            self.result["seconds"] = parse_seconds(self.seconds.get())
+        if self.duration is not None:
+            self.result["duration"] = parse_seconds(self.duration.get(), MAX_HOLD)
+        if self.amount is not None:
+            amount = parse_pixels(self.amount.get())
+            if amount is None:
+                self.result.pop("amount", None)  # the step scrolls to its target instead
+            else:
+                self.result["amount"] = amount
 
 
 class PasswordDialog(simpledialog.Dialog):
@@ -179,7 +245,7 @@ class RecordingInspector(tk.Toplevel):
         self.title(f"Kayıt adımları · {path.name}")
         self.start_replay = replay
         self.geometry("880x500")
-        self.minsize(620, 380)
+        self.minsize(720, 380)  # wide enough for the step toolbar with room for one more button
         self.configure(bg=theme.BG)
         self.protocol("WM_DELETE_WINDOW", self.withdraw)
         panel = tk.Frame(self, bg=theme.BG, padx=24, pady=18)
@@ -258,8 +324,11 @@ class RecordingInspector(tk.Toplevel):
         holder, self.add_button = theme.button(controls, "Adım ekle  ▾", self.show_add_menu, "Outline", "Small.")
         holder.pack(side="left", padx=(8, 0))
         self.add_menu = tk.Menu(self, tearoff=False)
-        for label, kind in (("Bekleme", "wait"), ("Metin doğrulaması", "text"), ("Adres doğrulaması", "url")):
-            self.add_menu.add_command(label=label, command=lambda kind=kind: self.add_step(kind))
+        for group in (ADD_INTERACTIONS, ADD_CHECKS):
+            if self.add_menu.index("end") is not None:
+                self.add_menu.add_separator()
+            for kind in group:
+                self.add_menu.add_command(label=ADD_LABELS[kind], command=lambda kind=kind: self.add_step(kind))
         self.edit_button, self.up_button = self.step_buttons["edit"], self.step_buttons["up"]
         self.down_button, self.delete_button = self.step_buttons["down"], self.step_buttons["delete"]
 
@@ -362,7 +431,21 @@ class RecordingInspector(tk.Toplevel):
                 value = f"Görünene kadar · en fazla {format_seconds(step['timeout'])} sn"
             elif step["action"] == "assert":
                 value = f"Başlar: {step['expected']}" if step["kind"] == "url" else f"İçerir: \"{step['expected']}\""
-            target = "Sayfa adresi" if step["action"] == "assert" and step["kind"] == "url" else step["selector"]
+            elif step["action"] == "scroll":
+                value = ("Görünene kadar" if step["selector"] else
+                         f"{'Aşağı' if step['amount'] > 0 else 'Yukarı'} {abs(step['amount'])} px")
+            elif step["action"] == "hold":
+                value = f"{format_seconds(step['duration'])} sn"
+            elif step["action"] == "sleep":
+                value = f"{format_seconds(step['seconds'])} sn"
+            elif step["action"] == "press":
+                value = step["key"]
+            elif step["action"] == "drag":
+                value = f"→ {step['to']}"
+            if step["action"] == "assert" and step["kind"] == "url":
+                target = "Sayfa adresi"
+            else:
+                target = step["selector"] or ("Sayfa" if step["action"] in PAGE_ACTIONS else "")
             self.table.insert("", "end", iid=str(index), values=(index, action, target, value))
         if selected is not None:
             self.highlight(selected + 1)
@@ -414,24 +497,37 @@ class RecordingInspector(tk.Toplevel):
         self.add_menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
 
     def add_step(self, kind):
-        """Insert a wait or a check after the selected step, or at the end."""
+        """Insert a new step of the given kind after the selected step, or at the end."""
         if self.busy:
             return
         index = self.selected_index()
         position = len(self.steps) if index is None else index + 1
-        # Usually the new step guards the step that follows it, so start from that step.
+        # A new step usually acts on the page of the step that follows it, so start from that step.
         neighbours = self.steps[position:position + 1] or self.steps[position - 1:position]
         neighbour = neighbours[0] if neighbours else {"url": self.data["url"], "selector": ""}
+        url, selector = neighbour["url"], neighbour["selector"]
+        title = "Adım ekle"
         if kind == "wait":
-            step = {"action": "wait", "url": neighbour["url"], "selector": neighbour["selector"],
-                    "timeout": max(10, self.timeout)}
+            step = {"action": "wait", "url": url, "selector": selector, "timeout": max(10, self.timeout)}
             title = "Bekleme ekle"
-        else:
+        elif kind in ("text", "url"):
             # The page as a whole is a useful default: "this text appears somewhere".
-            step = {"action": "assert", "kind": kind, "url": neighbour["url"],
-                    "selector": "" if kind == "url" else "body",
-                    "expected": neighbour["url"] if kind == "url" else ""}
+            step = {"action": "assert", "kind": kind, "url": url, "selector": "" if kind == "url" else "body",
+                    "expected": url if kind == "url" else ""}
             title = "Doğrulama ekle"
+        elif kind == "sleep":
+            step = {"action": "sleep", "url": url, "selector": "", "seconds": 2}
+            title = "Bekleme ekle"
+        elif kind == "scroll":
+            step = {"action": "scroll", "url": url, "selector": "", "amount": 600}
+        elif kind == "press":
+            step = {"action": "press", "url": url, "selector": "", "key": ""}
+        elif kind == "hold":
+            step = {"action": "hold", "url": url, "selector": selector, "duration": 1}
+        elif kind == "drag":
+            step = {"action": "drag", "url": url, "selector": selector, "to": ""}
+        else:  # hover, dblclick, rightclick
+            step = {"action": kind, "url": url, "selector": selector}
         dialog = StepDialog(self, step, title=title)
         if dialog.result is not None:
             self.steps.insert(position, dialog.result)
