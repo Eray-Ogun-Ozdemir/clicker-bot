@@ -3,14 +3,25 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import theme
-from recorder import (CLICK_COORDINATES, delete_credentials, missing_credentials, origin_of,
-                      save_credentials, save_recording, stored_credentials)
+from recorder import (CLICK_COORDINATES, DEFAULT_TIMEOUT, MAX_TIMEOUT, delete_credentials, format_seconds,
+                      missing_credentials, origin_of, save_credentials, save_recording, stored_credentials,
+                      valid_timeout)
+
+
+def parse_seconds(text):
+    """Read a duration typed as "5", "2.5" or "2,5"; None when it is not a usable limit."""
+    try:
+        value = float(text.strip().replace(",", "."))
+    except ValueError:
+        return None
+    value = int(value) if value.is_integer() else value
+    return value if valid_timeout(value) else None
 
 
 class StepDialog(simpledialog.Dialog):
-    def __init__(self, parent, step):
+    def __init__(self, parent, step, title="Adımı düzenle"):
         self.step = step
-        super().__init__(parent, title="Adımı düzenle")
+        super().__init__(parent, title=title)
 
     def body(self, master):
         self.configure(bg=theme.BG)
@@ -24,7 +35,12 @@ class StepDialog(simpledialog.Dialog):
         holder, self.selector = theme.entry(master, self.step["selector"], width=58)
         self.selector.configure(font=theme.mono(12))
         holder.pack(fill="x")
-        self.value = None
+        self.value = self.timeout = None
+        if self.step["action"] == "wait":
+            tk.Label(master, text="Hedef görünene kadar en fazla (sn)", bg=theme.BG, fg=theme.INK,
+                     font=theme.font(12, True)).pack(anchor="w", pady=(14, 6))
+            holder, self.timeout = theme.entry(master, format_seconds(self.step["timeout"]), width=8)
+            holder.pack(anchor="w")
         if self.step["action"] == "input":
             tk.Label(master, text="Girilecek değer", bg=theme.BG, fg=theme.INK,
                      font=theme.font(12, True)).pack(anchor="w", pady=(14, 6))
@@ -48,14 +64,21 @@ class StepDialog(simpledialog.Dialog):
         cancel, _ = theme.button(box, "İptal", self.cancel, "Outline", "Medium.")
         cancel.pack(side="right", padx=(0, 8))
         self.selector.bind("<Return>", self.ok)
+        if self.timeout is not None:
+            self.timeout.bind("<Return>", self.ok)
         self.bind("<Escape>", self.cancel)
 
     def validate(self):
-        if self.selector.get().strip():
-            return True
-        self.error.configure(text="⚠  Hedef boş bırakılamaz.")
+        if not self.selector.get().strip():
+            return self.reject("Hedef boş bırakılamaz.", self.selector)
+        if self.timeout is not None and parse_seconds(self.timeout.get()) is None:
+            return self.reject(f"Süre 0 ile {MAX_TIMEOUT} sn arasında bir sayı olmalı.", self.timeout)
+        return True
+
+    def reject(self, message, field):
+        self.error.configure(text=f"⚠  {message}")
         self.error.pack(anchor="w", fill="x", pady=(10, 0))
-        self.selector.focus_set()
+        field.focus_set()
         return False
 
     def apply(self):
@@ -68,6 +91,8 @@ class StepDialog(simpledialog.Dialog):
         self.result["selector"] = selector
         if self.value is not None:
             self.result["value"] = self.value.get("1.0", "end-1c")
+        if self.timeout is not None:
+            self.result["timeout"] = parse_seconds(self.timeout.get())
 
 
 class PasswordDialog(simpledialog.Dialog):
@@ -125,6 +150,7 @@ class RecordingInspector(tk.Toplevel):
         self.busy = False
         self.message = ""
         self.title(f"Kayıt adımları · {path.name}")
+        self.start_replay = replay
         self.geometry("880x500")
         self.minsize(620, 380)
         self.configure(bg=theme.BG)
@@ -138,6 +164,14 @@ class RecordingInspector(tk.Toplevel):
                  font=theme.font(10, True)).pack(anchor="w")
         title_row = tk.Frame(header, bg=theme.BG)
         title_row.pack(fill="x", pady=(6, 0))
+        # The recording-wide limit for each step to find its page and target. Packed first so a long
+        # file name is the one that gets cut when the window is narrow.
+        holder, self.timeout_entry = theme.entry(title_row, width=5, justify="right")
+        holder.pack(side="right")
+        tk.Label(title_row, text="Adım zaman aşımı (sn)", bg=theme.BG, fg=theme.MUTED,
+                 font=theme.font(12)).pack(side="right", padx=(0, 8))
+        self.timeout_entry.bind("<Return>", lambda _: self.apply_timeout(), add="+")
+        self.timeout_entry.bind("<FocusOut>", lambda _: self.apply_timeout(), add="+")
         self.name_label = tk.Label(title_row, bg=theme.BG, fg=theme.INK, font=theme.font(20, True))
         self.name_label.pack(side="left")
         self.count_badge = theme.badge(title_row)
@@ -182,6 +216,8 @@ class RecordingInspector(tk.Toplevel):
             holder, widget = theme.button(controls, text, command, "Outline", "Small.")
             holder.pack(side="left", padx=(0, 8))
             self.step_buttons[key] = widget
+        holder, self.wait_button = theme.button(controls, "Bekleme ekle", self.add_wait, "Outline", "Small.")
+        holder.pack(side="left", padx=(8, 0))
         self.edit_button, self.up_button = self.step_buttons["edit"], self.step_buttons["up"]
         self.down_button, self.delete_button = self.step_buttons["down"], self.step_buttons["delete"]
 
@@ -189,7 +225,7 @@ class RecordingInspector(tk.Toplevel):
         file_actions = tk.Frame(panel, bg=theme.BG)
         file_actions.pack(fill="x")
         holder, self.play_button = theme.button(file_actions, "Bu kaydı oynat",
-                                                lambda: replay(self.path, self.data), "Primary", "Medium.")
+                                                self.replay, "Primary", "Medium.")
         holder.pack(side="right")
         holder, self.save_button = theme.button(file_actions, "Kopyasını kaydet", self.save_copy, "Outline", "Medium.")
         holder.pack(side="right", padx=(0, 8))
@@ -218,12 +254,14 @@ class RecordingInspector(tk.Toplevel):
             (self.delete_button, selected),
             (self.up_button, selected and index > 0),
             (self.down_button, selected and index < len(self.steps) - 1),
+            (self.wait_button, not self.busy),
             (self.play_button, not self.busy),
             (self.save_button, not self.busy),
             (self.forget_button, not self.busy),
             (self.enter_button, not self.busy),
         ):
             button.state(["!disabled" if enabled else "disabled"])
+        self.timeout_entry.configure(state="disabled" if self.busy else "normal")
 
     def set_busy(self, busy):
         self.busy = busy
@@ -263,10 +301,13 @@ class RecordingInspector(tk.Toplevel):
                 value = "Parola girilmemiş" if self.password_missing else "Cihazda saklanan parola"
             elif step["action"] == "select":
                 value = ", ".join(step["values"])
+            elif step["action"] == "wait":
+                value = f"Görünene kadar · en fazla {format_seconds(step['timeout'])} sn"
             self.table.insert("", "end", iid=str(index),
                               values=(index, action, step["selector"], value))
         if selected is not None:
             self.highlight(selected + 1)
+        self.show_timeout()
         self.refresh_summary()
         self.update_controls()
         self.render_detail()
@@ -285,6 +326,44 @@ class RecordingInspector(tk.Toplevel):
             self.steps[index] = dialog.result
             self.changed(index)
 
+    @property
+    def timeout(self):
+        return self.data.get("timeout", DEFAULT_TIMEOUT)
+
+    def show_timeout(self):
+        state = self.timeout_entry.cget("state")
+        self.timeout_entry.configure(state="normal")
+        self.timeout_entry.delete(0, "end")
+        self.timeout_entry.insert(0, format_seconds(self.timeout))
+        self.timeout_entry.configure(state=state)
+
+    def apply_timeout(self):
+        if self.busy:
+            return
+        value = parse_seconds(self.timeout_entry.get())
+        if value is None:
+            self.show_timeout()
+            self.detail.set(f"Zaman aşımı 0 ile {MAX_TIMEOUT} sn arasında bir sayı olmalı.")
+        elif value != self.timeout:
+            self.data["timeout"] = value
+            self.changed(self.selected_index())
+
+    def add_wait(self):
+        """Insert a wait for an element after the selected step, or at the end."""
+        if self.busy:
+            return
+        index = self.selected_index()
+        position = len(self.steps) if index is None else index + 1
+        # Usually the wait guards the step that follows it, so start from that step's target.
+        neighbours = self.steps[position:position + 1] or self.steps[position - 1:position]
+        neighbour = neighbours[0] if neighbours else None
+        step = {"action": "wait", "url": neighbour["url"] if neighbour else self.data["url"],
+                "selector": neighbour["selector"] if neighbour else "", "timeout": max(10, self.timeout)}
+        dialog = StepDialog(self, step, title="Bekleme ekle")
+        if dialog.result is not None:
+            self.steps.insert(position, dialog.result)
+            self.changed(position)
+
     def move_step(self, direction):
         index = self.selected_index()
         if self.busy or index is None:
@@ -301,7 +380,12 @@ class RecordingInspector(tk.Toplevel):
         del self.steps[index]
         self.changed(min(index, len(self.steps) - 1) if self.steps else None)
 
+    def replay(self):
+        self.apply_timeout()  # a value typed just before clicking may not have lost focus yet
+        self.start_replay(self.path, self.data)
+
     def save_copy(self):
+        self.apply_timeout()
         filename = filedialog.asksaveasfilename(
             parent=self, defaultextension=".json", filetypes=[("Bot kaydı", "*.json")],
             initialdir=self.path.parent, initialfile=f"{self.path.stem}-edited.json")

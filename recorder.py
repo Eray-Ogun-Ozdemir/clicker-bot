@@ -8,11 +8,13 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from playwright.sync_api import Error as PlaywrightError, sync_playwright
+from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeout, sync_playwright
 
 
 CLICK_COORDINATES = ("x", "y", "scrollX", "scrollY")
 OVERLAY = Path(__file__).with_name("overlay.js")
+DEFAULT_TIMEOUT = 5  # seconds each step may wait for its page and target
+MAX_TIMEOUT = 300
 
 
 class Control:
@@ -141,9 +143,36 @@ def fill_password(target, origin, password):
         raise ValueError("Parola alanı veya site adresi değişti.")
 
 
-def play(page, step):
-    page.wait_for_url(lambda url: url == step["url"], timeout=5000)
+def valid_timeout(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value <= MAX_TIMEOUT
+
+
+def step_timeout(data, step):
+    """Seconds a step may wait: a wait step's own limit, otherwise the recording's."""
+    return step.get("timeout") or data.get("timeout") or DEFAULT_TIMEOUT
+
+
+def format_seconds(value):
+    return f"{value:g}"
+
+
+def play(page, step, timeout=DEFAULT_TIMEOUT):
+    try:
+        perform(page, step, timeout * 1000)
+    except PlaywrightTimeout:
+        seconds = format_seconds(timeout)
+        if step["action"] != "wait" and page.url != step["url"]:
+            raise ValueError(f"Sayfa {seconds} sn içinde beklenen adrese geçmedi: {step['url']}") from None
+        raise ValueError(f"Hedef {seconds} sn içinde hazır olmadı: {step['selector']}") from None
+
+
+def perform(page, step, timeout):
     target = page.locator(step["selector"])
+    if step["action"] == "wait":
+        # Several matches are fine: the step only waits until one of them shows up.
+        target.first.wait_for(state="visible", timeout=timeout)
+        return
+    page.wait_for_url(lambda url: url == step["url"], timeout=timeout)
     if step["action"] == "password":
         origin = origin_of(step["url"])
         password = credential_store().get_password(credential_service(step["url"]), step["credential"])
@@ -152,14 +181,14 @@ def play(page, step):
                              "Kaydı incele penceresindeki Parolayı gir ile ekleyebilirsin.")
         fill_password(target, origin, password)
     elif step["action"] == "input":
-        target.fill(step["value"], timeout=5000)
+        target.fill(step["value"], timeout=timeout)
     elif step["action"] == "select":
-        target.select_option(value=step["values"], timeout=5000)
+        target.select_option(value=step["values"], timeout=timeout)
     elif step["action"] == "keydown":
-        target.press("Enter", timeout=5000)
+        target.press("Enter", timeout=timeout)
     elif step["action"] == "click":
         if target.count() == 1 or not all(key in step for key in CLICK_COORDINATES):
-            target.click(position=step.get("position"), timeout=5000)
+            target.click(position=step.get("position"), timeout=timeout)
         else:
             page.evaluate("p => window.scrollTo(p)", {
                 "left": step["scrollX"], "top": step["scrollY"], "behavior": "instant"
@@ -191,6 +220,10 @@ def load_recording(file):
         if not isinstance(step, dict) or not all(isinstance(step.get(k), str)
                                                 for k in ("action", "selector", "url")):
             raise ValueError(f"{index}. adım geçersiz.")
+        if "timeout" in step and not (step["action"] == "wait" and valid_timeout(step["timeout"])):
+            raise ValueError(f"{index}. adımın bekleme süresi geçersiz.")
+    if "timeout" in data and not valid_timeout(data["timeout"]):
+        raise ValueError(f"Zaman aşımı 0 ile {MAX_TIMEOUT} sn arasında olmalı.")
     return data
 
 
@@ -299,7 +332,7 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
                 # Hide the bar so it never covers the element being clicked.
                 overlay(page, "visible", False)
                 try:
-                    play(page, step)
+                    play(page, step, step_timeout(data, step))
                 except Exception:
                     if control.stopped:  # the page was closed or stop was pressed mid-step
                         break
