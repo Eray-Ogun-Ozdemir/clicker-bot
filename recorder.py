@@ -1,4 +1,5 @@
 import argparse
+import copy
 import os
 import sys
 import json
@@ -339,7 +340,19 @@ def main():
         command.add_argument("file", type=Path)
     args = parser.parse_args()
     try:
-        run(args.file, getattr(args, "url", None), console=True)
+        if args.mode == "record":
+            run(args.file, args.url, console=True)
+            return
+        cases = playback_cases(load_recording(args.file))
+        for number, data in cases:
+            caption = f"Senaryo {number}/{len(cases)}" if number else ""
+            if caption:
+                print(f"— {caption}")
+            try:
+                if not run(args.file, data=data, console=True, caption=caption):
+                    break
+            except ValueError as exc:
+                raise ValueError(f"{caption} · {exc}" if caption else str(exc)) from exc
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -375,6 +388,68 @@ def valid_step_fields(step):
     return True
 
 
+# {{name}} in a step value is filled from the selected test data row at playback.
+VARIABLE = re.compile(r"\{\{\s*([^{}\s]+)\s*\}\}")
+# Step fields that describe the step itself rather than what it types or looks for.
+FIXED_FIELDS = ("action", "kind", "credential", "tag")
+
+
+def _texts(data):
+    """Every text a variable may appear in, with a function that writes a new value back."""
+    yield data["url"], lambda value: data.__setitem__("url", value)
+    for step in data["steps"]:
+        for key, value in step.items():
+            if key in FIXED_FIELDS:
+                continue
+            if isinstance(value, str):
+                yield value, lambda v, step=step, key=key: step.__setitem__(key, v)
+            elif isinstance(value, list):
+                for i, item in enumerate(value):
+                    if isinstance(item, str):
+                        yield item, lambda v, value=value, i=i: value.__setitem__(i, v)
+
+
+def step_variables(data):
+    """Names of the variables a recording uses, in the order they first appear."""
+    names = {}
+    for text, _ in _texts(data):
+        for name in VARIABLE.findall(text):
+            names.setdefault(name, None)
+    return list(names)
+
+
+def fill_variables(data, row):
+    """A copy of the recording with every {{name}} replaced by the row's value."""
+    filled = copy.deepcopy(data)
+    def value_of(match):
+        name = match.group(1)
+        if name not in row:
+            raise ValueError(f"Test verisinde {name} değişkeninin değeri yok.")
+        return row[name]
+    for text, write in list(_texts(filled)):
+        if VARIABLE.search(text):
+            write(VARIABLE.sub(value_of, text))
+    return filled
+
+
+def playback_cases(data):
+    """The runs a playback makes: one per test scenario, or the recording itself when it has no variables."""
+    names = step_variables(data)
+    if not names:
+        return [(None, data)]
+    rows = data.get("testData") or []
+    if not rows:
+        raise ValueError(f"Bu akış değişken kullanıyor ({', '.join(names)}). "
+                         "Kaydı incele penceresindeki Test verisi ile en az bir senaryo gir.")
+    cases = []
+    for number, row in enumerate(rows, 1):
+        missing = [name for name in names if name not in row]
+        if missing:
+            raise ValueError(f"Test verisinin {number}. senaryosunda değer eksik: {', '.join(missing)}.")
+        cases.append((number, fill_variables(data, row)))
+    return cases
+
+
 def load_recording(file):
     data = json.loads(file.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or not isinstance(data.get("steps"), list):
@@ -393,6 +468,11 @@ def load_recording(file):
             raise ValueError(f"{index}. adımdaki doğrulama eksik.")
     if "timeout" in data and not valid_timeout(data["timeout"]):
         raise ValueError(f"Zaman aşımı 0 ile {MAX_TIMEOUT} sn arasında olmalı.")
+    rows = data.get("testData", [])
+    if not isinstance(rows, list) or not all(
+            isinstance(row, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in row.items())
+            for row in rows):
+        raise ValueError("Kayıttaki test verisi geçersiz.")
     return data
 
 
@@ -419,7 +499,10 @@ def save_recording(file, data):
 
 
 def run(file, url_to_record=None, status=print, console=False, *, data=None, on_step=None, credentials=None,
-        control=None):
+        control=None, caption=""):
+    """Record into file, or play data (or the file); a playback returns False when it was stopped.
+
+    caption, such as "Senaryo 2/3", goes before the step count in the in-browser bar."""
     recording = url_to_record is not None
     if recording:
         if file.exists():
@@ -506,7 +589,7 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
                     break
                 if on_step:
                     on_step(index)
-                state["text"] = f"{index}/{total}. adım · {step_label(step)}"
+                state["text"] = f"{caption + ' · ' if caption else ''}{index}/{total}. adım · {step_label(step)}"
                 overlay(page, "progress", state["text"])
                 status(f"{index}. adım: {step_label(step)}")
                 # Hide the bar only while the mouse acts on the page, so it never covers the element
@@ -531,6 +614,7 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
             browser.close()
             status("Oynatma durduruldu. Tarayıcı kapatıldı." if stopped
                    else "Oynatma tamamlandı. Tarayıcı kapatıldı.")
+            return not stopped
 
 
 if __name__ == "__main__":

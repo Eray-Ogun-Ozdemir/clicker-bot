@@ -76,12 +76,20 @@ To write a flow without recording it, choose **Manuel hazırla** under **Hazırl
 
 Add steps with **Adım ekle**. Besides the steps described above, the menu offers the steps a recording creates: **Tıklama** (Click), **Yazı** (Type text), **Enter tuşu** (Enter key) and **Liste seçimi** (Dropdown selection). For a dropdown selection, enter the option's `value` attribute, not its visible label, and separate several values with commas. **Kaydet** saves a hand-built flow over its own file. Recorded flows are only saved as copies, so the original recording stays intact.
 
+### Test data
+
+To run one flow as several test scenarios, write a variable such as `{{kullanici}}` in a step instead of a fixed value: in text to type, a dropdown value, a check's expected text or address, a key, a selector or the starting URL. Then click **Test verisi** (Test data) at the right of the inspector's settings row. Each variable the flow uses is a row, in the order it first appears, and each scenario is a column. Add up to 20 scenarios with **Senaryo ekle**; when they no longer fit, the table scrolls sideways. The values are saved in the recording file in plain text, so do not enter real passwords.
+
+When a flow uses variables, playback runs every scenario in turn, each from the start, and the browser bar shows which one is playing, such as **Senaryo 2/3**. A scenario that fails does not stop the others. At the end, Clicker Bot reports how many scenarios passed and which ones failed, and the inspector keeps the last failure selected. **Durdur** also skips the scenarios still to come. If a scenario has no value for a variable, playback does not start.
+
 You can also use the command line from the activated environment:
 
 ```sh
 python recorder.py record https://example.com session.json
 python recorder.py play session.json
 ```
+
+`play` runs every test scenario of a flow in turn, and stops at the first scenario that fails.
 
 ## Appearance
 
