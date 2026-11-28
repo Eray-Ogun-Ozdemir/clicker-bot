@@ -8,7 +8,8 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 import theme
 from recorder import (ACTION_LABELS, CLICK_COORDINATES, DEFAULT_TIMEOUT, MAX_HOLD, MAX_TIMEOUT, PAGE_ACTIONS,
                       delete_credentials, format_seconds, missing_credentials, origin_of, overwrite_recording,
-                      save_credentials, save_recording, step_label, stored_credentials, valid_timeout)
+                      save_credentials, save_recording, step_label, step_variables, stored_credentials,
+                      valid_timeout)
 
 
 def parse_seconds(text, limit=MAX_TIMEOUT):
@@ -117,6 +118,8 @@ class StepDialog(simpledialog.Dialog):
             self.value.pack(fill="x")
             self.value.bind("<FocusIn>", lambda _: outer.configure(bg=theme.RED))
             self.value.bind("<FocusOut>", lambda _: outer.configure(bg=theme.FIELD_BORDER))
+            hint(master, "Her test senaryosunda farklı olacaksa {{kullanici}} gibi bir değişken yaz;\n"
+                         "değerlerini Test verisi penceresinden girersin.")
         self.error = tk.Label(master, bg=theme.BG, fg=theme.RED, font=theme.font(12), anchor="w")
         # Start where something is still missing: new checks and key presses come with a target filled in.
         missing = [f for f in (self.expected, self.key, self.to, self.values) if f is not None and not f.get()]
@@ -193,6 +196,121 @@ class StepDialog(simpledialog.Dialog):
                 self.result.pop("amount", None)  # the step scrolls to its target instead
             else:
                 self.result["amount"] = amount
+
+
+MAX_CASES = 20
+GRID_WIDTH = 720  # beyond this the scenarios scroll sideways
+
+
+class TestDataDialog(simpledialog.Dialog):
+    """Edit the test data: one row per variable, one column per test scenario."""
+
+    def __init__(self, parent, names, rows):
+        self.names = names
+        self.rows = [dict(row) for row in rows] or [{}]  # one dict per scenario, as saved
+        super().__init__(parent, title="Test verisi")
+
+    def body(self, master):
+        self.configure(bg=theme.BG)
+        master.configure(bg=theme.BG, padx=10, pady=6)
+        master.pack_configure(fill="both", expand=True)
+        tk.Label(master, text="Test verisi", bg=theme.BG, fg=theme.INK, font=theme.font(17, True)).pack(anchor="w")
+        theme.divider(master, pady=(10, 12))
+        hint(master, "Her sütun bir test senaryosu, her satır akıştaki bir {{değişken}}. Oynatma, akışı her\n"
+                     "senaryo için sırayla baştan çalıştırır. Değerler kayıt dosyasında düz metin olarak\n"
+                     "saklanır; gerçek parola yazma.")
+        # The grid sits on a canvas so that many scenarios scroll sideways instead of widening the window.
+        holder = tk.Frame(master, bg=theme.BG)
+        holder.pack(fill="x", pady=(14, 0))
+        self.canvas = tk.Canvas(holder, bg=theme.BG, highlightthickness=0, height=1)
+        self.canvas.pack(fill="x")
+        self.scroll = ttk.Scrollbar(holder, orient="horizontal", command=self.canvas.xview)
+        self.canvas.configure(xscrollcommand=self.scroll.set)
+        self.grid_frame = tk.Frame(self.canvas, bg=theme.BG)
+        self.canvas.create_window(0, 0, window=self.grid_frame, anchor="nw")
+        actions = tk.Frame(master, bg=theme.BG)
+        actions.pack(fill="x", pady=(10, 0))
+        holder, self.add_button = theme.button(actions, "Senaryo ekle", self.add_case, "Outline", "Small.")
+        holder.pack(side="left")
+        self.error = tk.Label(master, bg=theme.BG, fg=theme.RED, font=theme.font(12), anchor="w")
+        self.cells = []
+        self.render()
+        return self.cells[0][0]
+
+    def collect(self):
+        """Read what is typed into the grid back into self.rows (one dict per scenario)."""
+        self.rows = [{name: cell.get() for name, cell in zip(self.names, cells)} for cells in self.cells]
+
+    def render(self):
+        for child in self.grid_frame.winfo_children():
+            child.destroy()
+        self.cells = []
+        for line, name in enumerate(self.names, 1):
+            tk.Label(self.grid_frame, text=f"{{{{{name}}}}}", bg=theme.BG, fg=theme.MUTED, font=theme.mono(11)).grid(
+                row=line, column=0, sticky="w", padx=(0, 12))
+        for column, row in enumerate(self.rows, 1):
+            head = tk.Frame(self.grid_frame, bg=theme.BG)
+            head.grid(row=0, column=column, sticky="ew", padx=(0, 8), pady=(0, 4))
+            tk.Label(head, text=f"Senaryo {column}", bg=theme.BG, fg=theme.INK,
+                     font=theme.font(11, True)).pack(side="left")
+            button_holder, remove = theme.button(head, "Sil", lambda i=column - 1: self.remove_case(i), "Text", "Small.")
+            button_holder.pack(side="right")
+            if len(self.rows) == 1:
+                remove.state(["disabled"])
+            cells = []
+            for line, name in enumerate(self.names, 1):
+                cell_holder, cell = theme.entry(self.grid_frame, row.get(name, ""), width=14)
+                cell_holder.grid(row=line, column=column, sticky="ew", padx=(0, 8), pady=3)
+                cell.bind("<Return>", self.ok)
+                cells.append(cell)
+            self.cells.append(cells)
+        self.add_button.state(["disabled" if len(self.rows) >= MAX_CASES else "!disabled"])
+        # simpledialog returns focus here when validation fails; the old cells no longer exist.
+        self.initial_focus = self.cells[0][0]
+        self.grid_frame.update_idletasks()
+        width, height = self.grid_frame.winfo_reqwidth(), self.grid_frame.winfo_reqheight()
+        self.canvas.configure(width=min(width, GRID_WIDTH), height=height, scrollregion=(0, 0, width, height))
+        if width > GRID_WIDTH:
+            self.scroll.pack(fill="x", pady=(4, 0))
+        else:
+            self.scroll.pack_forget()
+
+    def add_case(self):
+        self.collect()
+        if len(self.rows) < MAX_CASES:
+            self.rows.append({})
+            self.render()
+            self.canvas.xview_moveto(1)  # show the new scenario
+            self.cells[-1][0].focus_set()
+
+    def remove_case(self, index):
+        self.collect()
+        if len(self.rows) > 1:
+            del self.rows[index]
+            self.render()
+
+    def buttonbox(self):
+        box = tk.Frame(self, bg=theme.BG, padx=20, pady=16)
+        box.pack(fill="x")
+        save, _ = theme.button(box, "Kaydet", self.ok, "Primary", "Medium.")
+        save.pack(side="right")
+        cancel, _ = theme.button(box, "İptal", self.cancel, "Outline", "Medium.")
+        cancel.pack(side="right", padx=(0, 8))
+        self.bind("<Escape>", self.cancel)
+
+    def validate(self):
+        self.collect()
+        # A completely empty scenario is a leftover, not a test case.
+        filled = [row for row in self.rows if any(row.values())]
+        if not filled:
+            self.error.configure(text="⚠  En az bir senaryoya değer gir.")
+            self.error.pack(anchor="w", fill="x", pady=(10, 0))
+            return False
+        self.rows = filled
+        return True
+
+    def apply(self):
+        self.result = self.rows
 
 
 class PasswordDialog(simpledialog.Dialog):
@@ -283,6 +401,8 @@ class RecordingInspector(tk.Toplevel):
         self.screenshot_check = ttk.Checkbutton(settings, text="Hata olunca ekran görüntüsü kaydet",
                                                 variable=self.screenshot_setting, command=self.toggle_screenshot)
         self.screenshot_check.pack(side="left", padx=(20, 0))
+        self.data_holder, self.data_button = theme.button(settings, "Test verisi", self.edit_test_data, "Text", "Small.")
+        self.data_holder.pack(side="right")
         theme.divider(panel, pady=(14, 14))
 
         outer, grid = theme.bordered(panel, theme.BORDER)
@@ -387,6 +507,7 @@ class RecordingInspector(tk.Toplevel):
             (self.down_button, selected and index < len(self.steps) - 1),
             (self.add_button, not self.busy),
             (self.screenshot_check, not self.busy),
+            (self.data_button, not self.busy),
             (self.play_button, not self.busy),
             (self.save_button, not self.busy),
             (self.save_in_place_button, not self.busy and self.dirty),
@@ -463,6 +584,7 @@ class RecordingInspector(tk.Toplevel):
         if selected is not None:
             self.highlight(selected + 1)
         self.show_timeout()
+        self.show_test_data()
         self.refresh_summary()
         self.update_controls()
         self.render_detail()
@@ -551,6 +673,32 @@ class RecordingInspector(tk.Toplevel):
         if dialog.result is not None:
             self.steps.insert(position, dialog.result)
             self.changed(position)
+
+    def edit_test_data(self):
+        if self.busy:
+            return
+        names = step_variables(self.data)
+        if not names:
+            messagebox.showinfo(
+                "Test verisi",
+                "Bu akışta değişken yok. Bir adımın değerine {{kullanici}} gibi bir değişken yaz; "
+                "sonra her test senaryosu için değerlerini buradan gir.", parent=self)
+            return
+        dialog = TestDataDialog(self, names, self.data.get("testData", []))
+        if dialog.result is not None and dialog.result != self.data.get("testData"):
+            self.data["testData"] = dialog.result
+            self.changed(self.selected_index())
+
+    def show_test_data(self):
+        names = step_variables(self.data)
+        rows = len(self.data.get("testData", []))
+        if not names:
+            text = "Test verisi"
+        elif rows:
+            text = f"Test verisi · {rows} senaryo"
+        else:
+            text = "Test verisi · girilmedi"
+        self.data_button.configure(text=text)
 
     def toggle_screenshot(self):
         if self.busy:

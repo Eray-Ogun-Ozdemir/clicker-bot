@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import theme
 from mascot import Mascot
 from inspector import RecordingInspector
-from recorder import Control, load_recording, overwrite_recording, run, save_recording
+from recorder import Control, load_recording, overwrite_recording, playback_cases, run, save_recording
 
 URL_MESSAGE = "http:// veya https:// ile başlayan bir URL gir. Örnek: https://example.com"
 
@@ -204,8 +204,11 @@ def main():
     active_step = None
     control = None
 
+    user_stop = threading.Event()  # Durdur in the app: also skips the test scenarios still to come
+
     def stop():
         if control and not control.stopped:
+            user_stop.set()
             control.stop()
             buttons[0].state(["disabled"])
             log("Durduruluyor…")
@@ -302,7 +305,21 @@ def main():
             if not recording:
                 inspector.detail.set("")
                 inspector.table.selection_remove(*inspector.table.selection())
+        cases = [(None, data)]
+        if not recording:
+            # One run per test scenario; a missing value stops here, before any browser opens.
+            try:
+                cases = playback_cases(data if data is not None else load_recording(Path(path)))
+            except (OSError, ValueError) as exc:
+                if inspector and recording is False:
+                    inspector.set_busy(False)
+                for field_entry in fields:
+                    field_entry.configure(state=account_state())
+                url.configure(state="normal")
+                messagebox.showerror("Clicker Bot", str(exc))
+                return
         busy = True
+        user_stop.clear()
         control = Control()
         mascot.move("recording" if recording else "playing")
         buttons[0].configure(text="■   Kaydı bitir" if recording else "■   Oynatmayı durdur")
@@ -312,11 +329,37 @@ def main():
         log("Tarayıcı açılıyor…")
 
         def worker():
+            nonlocal control
+            def report(msg):
+                events.put(("status", msg))
+            last = {"step": None}
+            def on_step(index):
+                last["step"] = index or last["step"]
+                events.put(("step", index))
             try:
-                def report(msg):
-                    events.put(("status", msg))
-                run(Path(path), address, report, data=data, credentials=credentials, control=control,
-                    on_step=lambda index: events.put(("step", index)))
+                if recording or cases[0][0] is None:  # a recording, or a playback without test data
+                    run(Path(path), address, report, data=cases[0][1], credentials=credentials, control=control,
+                        on_step=on_step)
+                    return
+                failed, halted = [], False
+                for number, case in cases:
+                    if user_stop.is_set():
+                        break
+                    if number > 1:
+                        control = Control()  # each run's closing browser stops its own control
+                    caption = f"Senaryo {number}/{len(cases)}"
+                    report(f"— {caption}")
+                    last["step"] = None
+                    try:
+                        if not run(Path(path), data=case, status=report, control=control, on_step=on_step,
+                                   caption=caption):
+                            halted = True  # Durdur, or the browser tab was closed
+                            break
+                    except Exception as exc:
+                        failed.append((number, last["step"]))
+                        events.put(("case_failed", (caption, last["step"], str(exc),
+                                                    getattr(exc, "screenshot", None))))
+                events.put(("summary", (len(cases), failed, halted or user_stop.is_set())))
             except Exception as exc:
                 events.put(("error", (str(exc), getattr(exc, "screenshot", None))))
             finally:
@@ -344,6 +387,32 @@ def main():
                 active_step = value
                 if value is not None:
                     inspector.highlight(value)
+            elif kind == "case_failed":
+                caption, step, message, screenshot = value
+                where = f"{caption} · {step}. adımda hata" if step else f"{caption} · hata"
+                if inspector:
+                    if step:
+                        inspector.highlight(step)
+                    inspector.show_message(f"{where} · {message}", error=True)
+                    inspector.show_screenshot(screenshot)
+                    inspector.deiconify()
+                mascot.move("fail")
+                log(f"{where}: {message}")
+            elif kind == "summary":
+                total, failed, stopped = value
+                if stopped:
+                    log("Oynatma durduruldu; kalan senaryolar çalıştırılmadı.")
+                elif failed:
+                    status.set("Hata")
+                    if inspector and failed[-1][1]:
+                        inspector.highlight(failed[-1][1])  # later rows moved the selection on
+                    message = (f"{total} senaryodan {total - len(failed)} tanesi geçti. "
+                               f"Başarısız senaryolar: {', '.join(str(n) for n, _ in failed)}.\n\n"
+                               "Son hatanın ayrıntısı Kayıt adımları penceresinde.")
+                    log(message)
+                    messagebox.showerror("Clicker Bot", message)
+                else:
+                    log(f"{total} senaryonun hepsi geçti.")
             elif kind == "error":
                 message, screenshot = value
                 if active_step is not None:
