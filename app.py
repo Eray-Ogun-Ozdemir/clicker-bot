@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import theme
 from mascot import Mascot
 from inspector import RecordingInspector
-from recorder import Control, load_recording, run
+from recorder import Control, load_recording, overwrite_recording, run, save_recording
 
 URL_MESSAGE = "http:// veya https:// ile başlayan bir URL gir. Örnek: https://example.com"
 
@@ -147,14 +147,28 @@ def main():
     section("02", "Hazırlama yöntemi")
     modes = ttk.Frame(panel)
     modes.pack(fill="x", pady=(10, 0))
-    for column, (label, bg, border, color) in enumerate([
-            ("●    Kaydederek hazırla", theme.CARD_SELECTED, theme.SELECTED_BORDER, red),
-            ("○    Manuel hazırla     ·  yakında", theme.MUTED_SURFACE, theme.BORDER, theme.CARD_DISABLED_TEXT)]):
+    mode = tk.StringVar(value="record")  # "record": record in the browser; "manual": build steps by hand
+    mode_cards = {}
+    for column, (value, text) in enumerate((("record", "Kaydederek hazırla"), ("manual", "Manuel hazırla"))):
         modes.columnconfigure(column, weight=1, uniform="cards")
-        card = tk.Frame(modes, bg=border)
+        card = tk.Frame(modes)
         card.grid(row=0, column=column, sticky="ew", padx=(0, 7) if column == 0 else (7, 0))
-        tk.Label(card, text=label, anchor="w", padx=18, pady=20, bg=bg, fg=color).pack(
-            fill="x", padx=1, pady=1)
+        label = tk.Label(card, anchor="w", padx=18, pady=20, cursor="hand2", takefocus=1)
+        label.pack(fill="x", padx=1, pady=1)
+        for widget in (card, label):
+            widget.bind("<Button-1>", lambda _, v=value: choose_mode(v))
+        for key in ("<Return>", "<space>"):
+            label.bind(key, lambda _, v=value: choose_mode(v))
+        mode_cards[value] = (card, label, text)
+
+    def paint_modes():
+        for value, (card, label, text) in mode_cards.items():
+            chosen = mode.get() == value
+            card.configure(bg=theme.SELECTED_BORDER if chosen else theme.BORDER)
+            label.configure(text=("●    " if chosen else "○    ") + text,
+                            bg=theme.CARD_SELECTED if chosen else theme.BG, fg=theme.RED if chosen else theme.MUTED)
+    paint_modes()
+    theme.on_palette_change(paint_modes)
     ttk.Frame(panel, height=14).pack()
     section("03", "Hesap bilgileri · isteğe bağlı")
     account = ttk.Frame(panel)
@@ -166,6 +180,22 @@ def main():
         holder, entry = theme.entry(account, show="•" if column else "")
         holder.grid(row=1, column=column, sticky="ew", padx=(0, 6) if not column else (6, 0))
         fields.append(entry)
+
+    def start_label():
+        return "Akışı oluştur" if mode.get() == "manual" else "Kaydı başlat"
+
+    def account_state():
+        # A manual flow has no login to record, so the account fields only apply to recording.
+        return "disabled" if busy or mode.get() == "manual" else "normal"
+
+    def choose_mode(value):
+        if busy or mode.get() == value:
+            return
+        mode.set(value)
+        paint_modes()
+        buttons[0].configure(text=start_label())
+        for field_entry in fields:
+            field_entry.configure(state=account_state())
     status = tk.StringVar(value="Hazır")
     events = queue.Queue()
     busy = False
@@ -204,6 +234,43 @@ def main():
         inspector = RecordingInspector(root, path, data, lambda path, data: start(False, path, data))
         if autoplay:
             start(False, path, data)
+
+    def primary_action():
+        if busy:
+            stop()
+        elif mode.get() == "manual":
+            create_flow()
+        else:
+            start(True)
+
+    def create_flow():
+        """Save an empty flow for the starting URL and open it in the inspector to add steps."""
+        nonlocal inspector
+        address = url.get().strip()
+        if not valid_url(address):
+            mascot.move("fail")
+            status.set("Hata")
+            show_url_error(URL_MESSAGE)
+            url.focus_set()
+            return
+        if inspector and not inspector.confirm_discard():
+            return
+        filename = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("Bot kaydı", "*.json")])
+        if not filename:
+            return
+        path = Path(filename)
+        data = {"url": address, "viewport": {"width": 1280, "height": 800}, "steps": [], "manual": True}
+        try:
+            # The save dialog has already asked before replacing an existing file.
+            (overwrite_recording if path.exists() else save_recording)(path, data)
+        except OSError as exc:
+            messagebox.showerror("Akış", str(exc))
+            return
+        if inspector:
+            inspector.destroy()
+        inspector = RecordingInspector(root, path, data, lambda path, data: start(False, path, data))
+        inspector.show_message("Boş akış oluşturuldu. İlk adımı Adım ekle ile ekle.")
+        log(f"Yeni akış oluşturuldu: {path.name}")
 
     def start(recording, path=None, data=None):
         nonlocal busy, active_step, control
@@ -263,14 +330,14 @@ def main():
             if kind == "done":
                 busy = False
                 for field_entry in fields:
-                    field_entry.configure(state="normal")
+                    field_entry.configure(state=account_state())
                 url.configure(state="normal")
                 if inspector:
                     inspector.set_busy(False)
                 if status.get() != "Hata":
                     mascot.move("idle")
                     status.set("Hazır")
-                buttons[0].configure(text="Kaydı başlat")
+                buttons[0].configure(text=start_label())
                 for button in buttons:
                     button.state(["!disabled"])
             elif kind == "step":
@@ -296,7 +363,7 @@ def main():
 
     actions = ttk.Frame(panel)
     actions.pack(fill="x", pady=(20, 0))
-    buttons = [ttk.Button(actions, style="Primary.TButton", text="Kaydı başlat", command=lambda: stop() if busy else start(True)),
+    buttons = [ttk.Button(actions, style="Primary.TButton", text="Kaydı başlat", command=lambda: primary_action()),
                ttk.Button(tk.Frame(actions, bg=theme.BORDER), style="Outline.TButton", text="Kayıt dosyasını oynat",
                           command=lambda: open_recording(True)),
                ttk.Button(actions, style="Text.TButton", text="Kaydı incele", command=lambda: open_recording(False))]

@@ -70,6 +70,12 @@ During playback, checks look again until they pass or the step's time limit runs
 
 Select **Hata olunca ekran görüntüsü kaydet** (Save a screenshot on failure) to capture the page when any step fails. The screenshot is saved as a PNG file next to the recording, named `<recording>-hata-<date-time>.png`, and **Ekran görüntüsünü aç** opens it. Only the five newest screenshots of each recording are kept; older ones are deleted when a new one is saved. The setting is off by default because screenshots can show personal data. The time limit, added steps and screenshot setting are saved with **Kopyasını kaydet**.
 
+### Build a flow by hand
+
+To write a flow without recording it, choose **Manuel hazırla** under **Hazırlama yöntemi**, enter the starting URL and click **Akışı oluştur**. Choose a JSON filename. Clicker Bot saves an empty flow and opens it in the inspector. Account details do not apply to these flows, so their fields are turned off.
+
+Add steps with **Adım ekle**. Besides the steps described above, the menu offers the steps a recording creates: **Tıklama** (Click), **Yazı** (Type text), **Enter tuşu** (Enter key) and **Liste seçimi** (Dropdown selection). For a dropdown selection, enter the option's `value` attribute, not its visible label, and separate several values with commas. **Kaydet** saves a hand-built flow over its own file. Recorded flows are only saved as copies, so the original recording stays intact.
+
 You can also use the command line from the activated environment:
 
 ```sh
