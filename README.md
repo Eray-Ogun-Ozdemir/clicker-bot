@@ -82,6 +82,14 @@ To run one flow as several test scenarios, write a variable such as `{{kullanici
 
 When a flow uses variables, playback runs every scenario in turn, each from the start, and the browser bar shows which one is playing, such as **Senaryo 2/3**. A scenario that fails does not stop the others. At the end, Clicker Bot reports how many scenarios passed and which ones failed, and the inspector keeps the last failure selected. **Durdur** also skips the scenarios still to come. If a scenario has no value for a variable, playback does not start.
 
+### Collections
+
+Group recordings by project under **KOLEKSİYONLAR** in the sidebar. Click **+** to create a collection. While a collection, or a recording in it, is selected in the sidebar, new recordings and flows built by hand are added to it. To add or remove the recording that is open in the inspector, use **Koleksiyon** in the inspector header. That menu can also create a collection.
+
+Double-click a recording in the sidebar to open it in the inspector. Right-click (or Control-click) a recording to open it, play it or remove it from the collection. Right-click a collection to add existing recordings, rename it or delete it. A recording whose file has been moved or deleted is marked with ⚠; opening it offers to remove it from the collection.
+
+A collection only remembers where its recordings are; the files stay where they were saved. Removing a recording or deleting a collection never deletes a recording file. Collections are kept in `collections.json`, in the same folder as `settings.json`.
+
 You can also use the command line from the activated environment:
 
 ```sh

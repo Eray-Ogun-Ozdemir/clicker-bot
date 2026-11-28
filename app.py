@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 import theme
 from mascot import Mascot
 from inspector import RecordingInspector
+from library import Library
+from sidebar import CollectionsPanel
 from recorder import Control, load_recording, overwrite_recording, playback_cases, run, save_recording
 
 URL_MESSAGE = "http:// veya https:// ile başlayan bir URL gir. Örnek: https://example.com"
@@ -68,6 +70,11 @@ def main():
     tk.Frame(selected, bg=red, width=3).pack(side="left", fill="y")
     tk.Label(selected, text="◍   Tarayıcı otomasyonu", bg=theme.SELECTED, fg=ink,
              anchor="w", padx=12, pady=11).pack(side="left", fill="x", expand=True)
+    library = Library()
+    # open_path and busy are defined further down; the panel only calls them after start-up.
+    collections_panel = CollectionsPanel(sidebar, library, lambda path, autoplay: open_path(path, autoplay),
+                                         busy=lambda: busy)
+    collections_panel.pack(fill="x")
     tk.Frame(body, bg=theme.BORDER, width=1).pack(side="left", fill="y")
     panel = ttk.Frame(body, padding=(24, 18))
     panel.pack(side="left", fill="both", expand=True)
@@ -201,6 +208,7 @@ def main():
     busy = False
 
     inspector = None
+    recorded = None  # the file a recording in progress will be saved to
     active_step = None
     control = None
 
@@ -214,11 +222,25 @@ def main():
             log("Durduruluyor…")
 
     def open_recording(autoplay):
-        nonlocal inspector
         filename = filedialog.askopenfilename(filetypes=[("Bot kaydı", "*.json")])
-        if not filename:
+        if filename:
+            open_path(Path(filename), autoplay)
+
+    def new_inspector(path, data):
+        return RecordingInspector(root, path, data, lambda path, data: start(False, path, data), library=library)
+
+    def collect(path):
+        """Add a new recording or flow to the collection selected in the sidebar, if any."""
+        name = collections_panel.selected_collection()
+        if name and path.is_file():
+            library.add(name, path)
+            log(f"{name} koleksiyonuna eklendi: {path.stem}")
+
+    def open_path(path, autoplay):
+        nonlocal inspector
+        if busy:
             return
-        path = Path(filename)
+        path = path.resolve()  # the same file opened from the sidebar or the file dialog compares equal
         if inspector and inspector.path == path and inspector.dirty:
             inspector.deiconify()
             inspector.lift()
@@ -234,7 +256,7 @@ def main():
             if not inspector.confirm_discard():
                 return
             inspector.destroy()
-        inspector = RecordingInspector(root, path, data, lambda path, data: start(False, path, data))
+        inspector = new_inspector(path, data)
         if autoplay:
             start(False, path, data)
 
@@ -271,12 +293,13 @@ def main():
             return
         if inspector:
             inspector.destroy()
-        inspector = RecordingInspector(root, path, data, lambda path, data: start(False, path, data))
+        inspector = new_inspector(path, data)
+        collect(path)
         inspector.show_message("Boş akış oluşturuldu. İlk adımı Adım ekle ile ekle.")
         log(f"Yeni akış oluşturuldu: {path.name}")
 
     def start(recording, path=None, data=None):
-        nonlocal busy, active_step, control
+        nonlocal busy, active_step, control, recorded
         if busy:
             return
         address = url.get().strip() if recording else None
@@ -319,6 +342,7 @@ def main():
                 messagebox.showerror("Clicker Bot", str(exc))
                 return
         busy = True
+        recorded = Path(path) if recording else None
         user_stop.clear()
         control = Control()
         mascot.move("recording" if recording else "playing")
@@ -372,6 +396,8 @@ def main():
             kind, value = events.get()
             if kind == "done":
                 busy = False
+                if recorded:  # nothing is written when a recording is cancelled
+                    collect(recorded)
                 for field_entry in fields:
                     field_entry.configure(state=account_state())
                 url.configure(state="normal")
