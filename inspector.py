@@ -6,6 +6,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import theme
+from sidebar import ask_collection_name
 from recorder import (ACTION_LABELS, CLICK_COORDINATES, DEFAULT_TIMEOUT, MAX_HOLD, MAX_TIMEOUT, PAGE_ACTIONS,
                       delete_credentials, format_seconds, missing_credentials, origin_of, overwrite_recording,
                       save_credentials, save_recording, step_label, step_variables, stored_credentials,
@@ -360,8 +361,9 @@ class PasswordDialog(simpledialog.Dialog):
 
 
 class RecordingInspector(tk.Toplevel):
-    def __init__(self, parent, path, data, replay):
+    def __init__(self, parent, path, data, replay, library=None):
         super().__init__(parent)
+        self.library = library
         self.path = path
         self.data = data
         self.dirty = False
@@ -382,6 +384,12 @@ class RecordingInspector(tk.Toplevel):
                  font=theme.font(10, True)).pack(anchor="w")
         title_row = tk.Frame(header, bg=theme.BG)
         title_row.pack(fill="x", pady=(6, 0))
+        if library is not None:
+            # Packed first so a long file name is the one that gets cut when the window is narrow.
+            holder, self.collection_button = theme.button(title_row, "Koleksiyon  ▾", self.show_collection_menu,
+                                                          "Outline", "Small.")
+            holder.pack(side="right")
+            self.collection_menu = tk.Menu(self, tearoff=False)
         self.name_label = tk.Label(title_row, bg=theme.BG, fg=theme.INK, font=theme.font(20, True))
         self.name_label.pack(side="left")
         self.count_badge = theme.badge(title_row)
@@ -508,6 +516,7 @@ class RecordingInspector(tk.Toplevel):
             (self.add_button, not self.busy),
             (self.screenshot_check, not self.busy),
             (self.data_button, not self.busy),
+            *(((self.collection_button, not self.busy),) if self.library is not None else ()),
             (self.play_button, not self.busy),
             (self.save_button, not self.busy),
             (self.save_in_place_button, not self.busy and self.dirty),
@@ -673,6 +682,37 @@ class RecordingInspector(tk.Toplevel):
         if dialog.result is not None:
             self.steps.insert(position, dialog.result)
             self.changed(position)
+
+    def show_collection_menu(self):
+        """Tick the collections this recording belongs to; ticking one adds or removes it there."""
+        menu = self.collection_menu
+        menu.delete(0, "end")
+        member = set(self.library.containing(self.path))
+        self.collection_vars = []
+        for name in self.library.names():
+            var = tk.BooleanVar(master=self, value=name in member)
+            self.collection_vars.append(var)
+            menu.add_checkbutton(label=name, variable=var, command=lambda n=name, v=var: self.toggle_collection(n, v))
+        if self.library.names():
+            menu.add_separator()
+        menu.add_command(label="Yeni koleksiyon…", command=self.new_collection)
+        button = self.collection_button
+        menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
+
+    def toggle_collection(self, name, var):
+        if var.get():
+            self.library.add(name, self.path)
+            self.show_message(f"{name} koleksiyonuna eklendi.")
+        else:
+            self.library.remove(name, self.path)
+            self.show_message(f"{name} koleksiyonundan çıkarıldı. Kayıt dosyası duruyor.")
+
+    def new_collection(self):
+        name = ask_collection_name(self, self.library)
+        if name:
+            self.library.add_collection(name)
+            self.library.add(name, self.path)
+            self.show_message(f"{name} koleksiyonu oluşturuldu ve bu kayıt eklendi.")
 
     def edit_test_data(self):
         if self.busy:

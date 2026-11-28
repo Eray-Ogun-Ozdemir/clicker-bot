@@ -288,6 +288,10 @@ def _style(root):
                     relief="flat", borderwidth=0, padding=(10, 9))
     style.map("Steps.Treeview.Heading", background=[("active", BAR)])
     style.layout("Steps.Treeview", [("Steps.Treeview.treearea", {"sticky": "nswe"})])
+    style.configure("Sidebar.Treeview", background=SIDEBAR, fieldbackground=SIDEBAR, foreground=INK,
+                    font=font(12), rowheight=26, borderwidth=0, relief="flat", indent=14)
+    style.map("Sidebar.Treeview", background=[("selected", SELECTED)], foreground=[("selected", INK)])
+    style.layout("Sidebar.Treeview", [("Sidebar.Treeview.treearea", {"sticky": "nswe"})])
     style.configure("Vertical.TScrollbar", background=BAR, troughcolor=BG, bordercolor=BG,
                     arrowcolor=MUTED, relief="flat")
     return style
