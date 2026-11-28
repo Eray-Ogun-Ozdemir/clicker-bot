@@ -7,8 +7,8 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 import theme
 from recorder import (ACTION_LABELS, CLICK_COORDINATES, DEFAULT_TIMEOUT, MAX_HOLD, MAX_TIMEOUT, PAGE_ACTIONS,
-                      delete_credentials, format_seconds, missing_credentials, origin_of, save_credentials,
-                      save_recording, step_label, stored_credentials, valid_timeout)
+                      delete_credentials, format_seconds, missing_credentials, origin_of, overwrite_recording,
+                      save_credentials, save_recording, step_label, stored_credentials, valid_timeout)
 
 
 def parse_seconds(text, limit=MAX_TIMEOUT):
@@ -31,9 +31,10 @@ def parse_pixels(text):
 
 
 # What "Adım ekle" offers, in menu order: interactions, then waits and checks.
+ADD_BASICS = ("click", "input", "keydown", "select")
 ADD_INTERACTIONS = ("scroll", "hover", "hold", "dblclick", "rightclick", "press", "drag")
 ADD_CHECKS = ("wait", "sleep", "text", "url")
-ADD_LABELS = {**ACTION_LABELS, "text": "Metin doğrulaması", "url": "Adres doğrulaması"}
+ADD_LABELS = {**ACTION_LABELS, "keydown": "Enter tuşu", "text": "Metin doğrulaması", "url": "Adres doğrulaması"}
 
 
 def step_title(step):
@@ -72,7 +73,7 @@ class StepDialog(simpledialog.Dialog):
         theme.divider(master, pady=(10, 14))
         step, action = self.step, self.step["action"]
         self.selector = self.value = self.timeout = self.expected = None
-        self.amount = self.duration = self.key = self.to = self.seconds = None
+        self.amount = self.duration = self.key = self.to = self.seconds = self.values = None
         url_check = action == "assert" and step["kind"] == "url"
         if not url_check and action != "sleep":  # these look at the page or the clock, not at an element
             label = "Hedef (selector) · boş bırakılırsa sayfa" if action in PAGE_ACTIONS else "Hedef (selector)"
@@ -102,6 +103,9 @@ class StepDialog(simpledialog.Dialog):
                          "Hedef boşsa tuş sayfaya, doluysa o öğeye gönderilir.")
         elif action == "drag":
             self.to = self.entry(master, "Bırakılacak yer (selector)", step["to"], mono=True)
+        elif action == "select":
+            self.values = self.entry(master, "Seçilecek seçenek (value)", ", ".join(step["values"]), mono=True)
+            hint(master, "Seçeneğin görünen adı değil, value değeri. Birden fazlaysa virgülle ayır.")
         elif action == "input":
             field_label(master, "Girilecek değer")
             outer, inner = theme.bordered(master)
@@ -115,13 +119,13 @@ class StepDialog(simpledialog.Dialog):
             self.value.bind("<FocusOut>", lambda _: outer.configure(bg=theme.FIELD_BORDER))
         self.error = tk.Label(master, bg=theme.BG, fg=theme.RED, font=theme.font(12), anchor="w")
         # Start where something is still missing: new checks and key presses come with a target filled in.
-        missing = [f for f in (self.expected, self.key, self.to) if f is not None and not f.get()]
+        missing = [f for f in (self.expected, self.key, self.to, self.values) if f is not None and not f.get()]
         return missing[0] if missing else self.fields[0]
 
     @property
     def fields(self):
         return [f for f in (self.selector, self.timeout, self.seconds, self.expected, self.amount, self.duration,
-                            self.key, self.to) if f is not None]
+                            self.key, self.to, self.values) if f is not None]
 
     def buttonbox(self):
         box = tk.Frame(self, bg=theme.BG, padx=20, pady=16)
@@ -141,7 +145,8 @@ class StepDialog(simpledialog.Dialog):
             return self.reject("Hedef boş bırakılamaz.", self.selector)
         for field, message in ((self.expected, "Beklenen değer boş bırakılamaz."),
                                (self.key, "Basılacak tuşu yaz."),
-                               (self.to, "Bırakılacak yeri yaz.")):
+                               (self.to, "Bırakılacak yeri yaz."),
+                               (self.values, "Seçilecek seçeneğin value değerini yaz.")):
             if field is not None and not field.get().strip():
                 return self.reject(message, field)
         for field in (self.timeout, self.seconds):
@@ -174,6 +179,8 @@ class StepDialog(simpledialog.Dialog):
                 self.result[name] = field.get().strip()
         if self.value is not None:
             self.result["value"] = self.value.get("1.0", "end-1c")
+        if self.values is not None:
+            self.result["values"] = [v.strip() for v in self.values.get().split(",") if v.strip()]
         if self.timeout is not None:
             self.result["timeout"] = parse_seconds(self.timeout.get())
         if self.seconds is not None:
@@ -324,7 +331,7 @@ class RecordingInspector(tk.Toplevel):
         holder, self.add_button = theme.button(controls, "Adım ekle  ▾", self.show_add_menu, "Outline", "Small.")
         holder.pack(side="left", padx=(8, 0))
         self.add_menu = tk.Menu(self, tearoff=False)
-        for group in (ADD_INTERACTIONS, ADD_CHECKS):
+        for group in (ADD_BASICS, ADD_INTERACTIONS, ADD_CHECKS):
             if self.add_menu.index("end") is not None:
                 self.add_menu.add_separator()
             for kind in group:
@@ -340,6 +347,11 @@ class RecordingInspector(tk.Toplevel):
         holder.pack(side="right")
         holder, self.save_button = theme.button(file_actions, "Kopyasını kaydet", self.save_copy, "Outline", "Medium.")
         holder.pack(side="right", padx=(0, 8))
+        # Flows built by hand are saved in place; recordings keep their original and are saved as copies.
+        self.save_in_place_holder, self.save_in_place_button = theme.button(
+            file_actions, "Kaydet", self.save, "Outline", "Medium.")
+        if data.get("manual"):
+            self.save_in_place_holder.pack(side="right", padx=(0, 8))
         # Exactly one of these shows for recordings with a password step, depending on this device.
         self.forget_holder, self.forget_button = theme.button(
             file_actions, "Parolayı cihazdan sil", self.forget_password, "Text", "Medium.")
@@ -377,6 +389,7 @@ class RecordingInspector(tk.Toplevel):
             (self.screenshot_check, not self.busy),
             (self.play_button, not self.busy),
             (self.save_button, not self.busy),
+            (self.save_in_place_button, not self.busy and self.dirty),
             (self.forget_button, not self.busy),
             (self.enter_button, not self.busy),
         ):
@@ -515,6 +528,12 @@ class RecordingInspector(tk.Toplevel):
             step = {"action": "assert", "kind": kind, "url": url, "selector": "" if kind == "url" else "body",
                     "expected": url if kind == "url" else ""}
             title = "Doğrulama ekle"
+        elif kind in ("click", "keydown"):
+            step = {"action": kind, "url": url, "selector": selector}
+        elif kind == "input":
+            step = {"action": "input", "url": url, "selector": selector, "value": ""}
+        elif kind == "select":
+            step = {"action": "select", "url": url, "selector": selector, "values": []}
         elif kind == "sleep":
             step = {"action": "sleep", "url": url, "selector": "", "seconds": 2}
             title = "Bekleme ekle"
@@ -579,6 +598,21 @@ class RecordingInspector(tk.Toplevel):
         self.apply_timeout()  # a value typed just before clicking may not have lost focus yet
         self.start_replay(self.path, self.data)
 
+    def save(self):
+        """Save a hand-built flow over its own file."""
+        self.apply_timeout()
+        if self.busy or not self.data.get("manual"):
+            return
+        try:
+            overwrite_recording(self.path, self.data)
+        except OSError as exc:
+            messagebox.showerror("Kaydet", str(exc), parent=self)
+            return
+        self.dirty = False
+        self.show_message(f"Kaydedildi · {self.path.name}")
+        self.refresh_summary()
+        self.update_controls()
+
     def save_copy(self):
         self.apply_timeout()
         filename = filedialog.asksaveasfilename(
@@ -599,6 +633,7 @@ class RecordingInspector(tk.Toplevel):
         self.dirty = False
         self.show_message(f"Kopya kaydedildi · {path.name}")
         self.refresh_summary()
+        self.update_controls()  # nothing left to save in place
 
     def forget_password(self):
         if self.busy or not messagebox.askyesno(

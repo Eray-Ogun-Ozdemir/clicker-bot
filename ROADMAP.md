@@ -6,7 +6,7 @@ These are proposed improvements, ordered by the value they bring to recording, e
 | --- | --- | --- | --- |
 | 1 | Recording inspector | Open a recording and see each step's action, target and value. Highlight the current step during playback and keep the failed step selected. | Done |
 | 2 | Step editor | Edit, reorder or remove recorded steps and save a copy. Open existing JSON recordings with their original step order and viewport. | Done |
-| 3 | Manual workflow builder | Enable the manual preparation option. Create a workflow from a starting URL and add click, fill and Enter steps through the same editor. | Planned |
+| 3 | Manual workflow builder | Enable the manual preparation option. Create a workflow from a starting URL and add click, fill and Enter steps through the same editor. | Done |
 | 4 | Waits and playback controls | Add a wait for an element to become visible, a configurable timeout and a stop button that closes the playback browser. | Done |
 | 5 | Assertions and failure details | Check expected text or a destination URL. Show expected and actual results alongside the failed step, with an optional local screenshot. | Done |
 | 6 | Recording collections | Group saved workflows by project in the sidebar and reopen a recording by name. | Planned |

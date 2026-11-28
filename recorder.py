@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 import json
 import random
@@ -343,11 +344,22 @@ def main():
         parser.error(str(exc))
 
 
+# Steps where the mouse acts on the page; the in-browser bar is hidden while they run.
+POINTER_ACTIONS = ("click", "dblclick", "rightclick", "hover", "hold", "drag")
+# Steps that always act on one element, so their selector may not be empty.
+ELEMENT_ACTIONS = ("click", "input", "select", "keydown", "hover", "hold", "dblclick", "rightclick", "drag")
+
+
 def valid_step_fields(step):
-    """Check the fields the newer interaction steps need; older step types pass through."""
+    """Check the fields each step type needs beyond action, selector and url."""
     action, selector = step["action"], step["selector"]
-    if action in ("hover", "hold", "dblclick", "rightclick", "drag") and not selector:
+    if action in ELEMENT_ACTIONS and not selector:
         return False
+    if action == "input":
+        return isinstance(step.get("value"), str)
+    if action == "select":
+        values = step.get("values")
+        return isinstance(values, list) and bool(values) and all(isinstance(v, str) for v in values)
     if action == "scroll":
         amount = step.get("amount")
         return bool(selector) or (isinstance(amount, int) and not isinstance(amount, bool) and amount != 0)
@@ -382,6 +394,17 @@ def load_recording(file):
     if "timeout" in data and not valid_timeout(data["timeout"]):
         raise ValueError(f"Zaman aşımı 0 ile {MAX_TIMEOUT} sn arasında olmalı.")
     return data
+
+
+def overwrite_recording(file, data):
+    """Replace a recording in place; a half-written file never takes the old one's place."""
+    content = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    temporary = file.with_name(f".{file.name}.tmp")
+    try:
+        temporary.write_bytes(content)
+        os.replace(temporary, file)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def save_recording(file, data):
@@ -486,17 +509,22 @@ def run(file, url_to_record=None, status=print, console=False, *, data=None, on_
                 state["text"] = f"{index}/{total}. adım · {step_label(step)}"
                 overlay(page, "progress", state["text"])
                 status(f"{index}. adım: {step_label(step)}")
-                # Hide the bar so it never covers the element being clicked.
-                overlay(page, "visible", False)
+                # Hide the bar only while the mouse acts on the page, so it never covers the element
+                # being clicked; through waits and checks it stays up, with Durdur in reach.
+                pointer = step["action"] in POINTER_ACTIONS
+                if pointer:
+                    overlay(page, "visible", False)
                 try:
                     play(page, step, step_timeout(data, step), lambda: control.stopped)
                 except Exception as exc:
                     if control.stopped:  # the page was closed or stop was pressed mid-step
                         break
                     if data.get("failureScreenshot") and file is not None:
+                        overlay(page, "visible", False)  # show the page, not the bar
                         exc.screenshot = failure_screenshot(page, file)
                     raise
-                overlay(page, "visible", True)
+                if pointer:
+                    overlay(page, "visible", True)
             if on_step:
                 on_step(None)
             stopped = control.stopped  # read before close(), whose close event also sets it
